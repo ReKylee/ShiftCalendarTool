@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from "react";
 import { Shift, GoogleCalendar } from "./types";
 import { extractShiftsFromImage } from "./services/geminiService";
@@ -165,7 +164,8 @@ export default function App() {
   const [loadingMessage, setLoadingMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const [scriptsLoaded, setScriptsLoaded] = useState(false);
+  const [gapiLoaded, setGapiLoaded] = useState(false);
+  const [gisLoaded, setGisLoaded] = useState(false);
   const [tokenClient, setTokenClient] = useState<any>(null);
   const [tokenResponse, setTokenResponse] = useState<any>(null);
 
@@ -223,13 +223,13 @@ export default function App() {
     gapiScript.src = "https://apis.google.com/js/api.js";
     gapiScript.async = true;
     gapiScript.defer = true;
-    gapiScript.onload = () => setScriptsLoaded((prev) => prev | true);
+    gapiScript.onload = () => setGapiLoaded(true);
 
     const gisScript = document.createElement("script");
     gisScript.src = "https://accounts.google.com/gsi/client";
     gisScript.async = true;
     gisScript.defer = true;
-    gisScript.onload = () => setScriptsLoaded((prev) => prev | true);
+    gisScript.onload = () => setGisLoaded(true);
 
     document.body.appendChild(gapiScript);
     document.body.appendChild(gisScript);
@@ -241,7 +241,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (scriptsLoaded) {
+    if (gapiLoaded && gisLoaded) {
       window.gapi.load("client", () => {
         window.gapi.client.init({}).then(() => {
           window.gapi.client.load("calendar", "v3").then(() => {
@@ -285,7 +285,7 @@ export default function App() {
         });
       });
     }
-  }, [scriptsLoaded]);
+  }, [gapiLoaded, gisLoaded]);
 
   useEffect(() => {
     if (isSignedIn) {
@@ -500,21 +500,16 @@ export default function App() {
     setAppStep("CONFIG");
   };
 
+  const handleContinueToUpload = () => {
+    setAppStep("UPLOAD");
+  };
+
   const isConfigComplete =
     userName.trim() !== "" && isSignedIn && selectedCalendarId !== null;
-  const isApiReady = scriptsLoaded;
+  const isApiReady = gapiLoaded && gisLoaded;
   const conflictingShiftCount = extractedShifts.filter(
     (s) => s.isConflicting,
   ).length;
-
-  useEffect(() => {
-    if (
-      isConfigComplete &&
-      (appStep === "CONFIG" || (appStep === "UPLOAD" && !imageFile))
-    ) {
-      setAppStep("UPLOAD");
-    }
-  }, [isConfigComplete, appStep, imageFile]);
 
   const getSignInButtonText = () => {
     if (!isApiReady) return "Initializing Sign-In...";
@@ -612,6 +607,16 @@ export default function App() {
                 )}
               </div>
             </div>
+            {isConfigComplete && (
+              <div className="flex justify-end pt-4">
+                <button
+                  onClick={handleContinueToUpload}
+                  className="w-full sm:w-auto px-6 py-3 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105"
+                >
+                  Continue
+                </button>
+              </div>
+            )}
           </div>
         </StepCard>
 
