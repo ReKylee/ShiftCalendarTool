@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from "react";
 import { Shift, GoogleCalendar } from "./types";
 import { extractShiftsFromImage } from "./services/geminiService";
@@ -164,7 +165,7 @@ export default function App() {
   const [loadingMessage, setLoadingMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const [gapiLoaded, setGapiLoaded] = useState(false);
+  const [gapiReady, setGapiReady] = useState(false);
   const [gisLoaded, setGisLoaded] = useState(false);
   const [tokenClient, setTokenClient] = useState<any>(null);
   const [tokenResponse, setTokenResponse] = useState<any>(null);
@@ -195,7 +196,7 @@ export default function App() {
   }, [selectedCalendarId]);
 
   const listCalendars = useCallback(async () => {
-    if (!isSignedIn) return;
+    if (!isSignedIn || !gapiReady) return;
     try {
       const response = await window.gapi.client.calendar.calendarList.list();
       const items = response.result.items.filter(
@@ -216,7 +217,7 @@ export default function App() {
         }`,
       );
     }
-  }, [isSignedIn, selectedCalendarId]);
+  }, [isSignedIn, selectedCalendarId, gapiReady]);
 
   useEffect(() => {
     const gapiScript = document.createElement("script");
@@ -241,57 +242,62 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (gapiLoaded && gisLoaded) {
+    if (gapiLoaded) {
       window.gapi.load("client", () => {
         window.gapi.client.init({}).then(() => {
           window.gapi.client.load("calendar", "v3").then(() => {
-            try {
-              const client = window.google.accounts.oauth2.initTokenClient({
-                client_id: GOOGLE_CLIENT_ID,
-                scope: SCOPES,
-                callback: (tokenResponse: any) => {
-                  setTokenResponse(tokenResponse);
-                  if (tokenResponse && tokenResponse.access_token) {
-                    window.gapi.client.setToken({
-                      access_token: tokenResponse.access_token,
-                    });
-                    setIsSignedIn(true);
-                    setError(null); // Clear errors on successful sign-in
-                  } else {
-                    setError("Authentication failed. Please try again.");
-                    setIsSignedIn(false);
-                  }
-                },
-                error_callback: (error: any) => {
-                  console.error("Google Sign-In Error:", error);
-                  setError(
-                    `Google Sign-In failed: ${
-                      error.message ||
-                      "Please check your configuration and try again."
-                    }`,
-                  );
-                },
-              });
-              setTokenClient(() => client);
-            } catch (err: any) {
-              console.error("Error initializing Google Identity Services:", err);
-              setError(
-                `Failed to initialize sign-in service: ${
-                  err.message || "Unknown error"
-                }`,
-              );
-            }
+            setGapiReady(true);
           });
         });
       });
     }
-  }, [gapiLoaded, gisLoaded]);
+  }, [gapiLoaded]);
 
   useEffect(() => {
-    if (isSignedIn) {
+    if (gapiReady && gisLoaded) {
+      try {
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: SCOPES,
+          callback: (tokenResponse: any) => {
+            setTokenResponse(tokenResponse);
+            if (tokenResponse && tokenResponse.access_token) {
+              window.gapi.client.setToken({
+                access_token: tokenResponse.access_token,
+              });
+              setIsSignedIn(true);
+              setError(null); // Clear errors on successful sign-in
+            } else {
+              setError("Authentication failed. Please try again.");
+              setIsSignedIn(false);
+            }
+          },
+          error_callback: (error: any) => {
+            console.error("Google Sign-In Error:", error);
+            setError(
+              `Google Sign-In failed: ${
+                error.message || "Please check your configuration and try again."
+              }`,
+            );
+          },
+        });
+        setTokenClient(() => client);
+      } catch (err: any) {
+        console.error("Error initializing Google Identity Services:", err);
+        setError(
+          `Failed to initialize sign-in service: ${
+            err.message || "Unknown error"
+          }`,
+        );
+      }
+    }
+  }, [gapiReady, gisLoaded]);
+
+  useEffect(() => {
+    if (isSignedIn && gapiReady) {
       listCalendars();
     }
-  }, [isSignedIn, listCalendars]);
+  }, [isSignedIn, gapiReady, listCalendars]);
 
   const handleSignIn = () => {
     if (tokenClient) {
@@ -506,7 +512,7 @@ export default function App() {
 
   const isConfigComplete =
     userName.trim() !== "" && isSignedIn && selectedCalendarId !== null;
-  const isApiReady = gapiLoaded && gisLoaded;
+  const isApiReady = gapiReady && gisLoaded;
   const conflictingShiftCount = extractedShifts.filter(
     (s) => s.isConflicting,
   ).length;
