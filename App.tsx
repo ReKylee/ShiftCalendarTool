@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from "react";
 import { Shift, GoogleCalendar } from "./types";
 import { extractShiftsFromImage } from "./services/geminiService";
@@ -194,7 +195,7 @@ export default function App() {
   }, [selectedCalendarId]);
 
   const listCalendars = useCallback(async () => {
-    if (!gapiInitialized) return;
+    if (!isSignedIn) return;
     try {
       const response = await window.gapi.client.calendar.calendarList.list();
       const items = response.result.items.filter(
@@ -215,7 +216,7 @@ export default function App() {
         }`,
       );
     }
-  }, [gapiInitialized, selectedCalendarId]);
+  }, [isSignedIn, selectedCalendarId]);
 
   useEffect(() => {
     if (!API_KEY || !GOOGLE_CLIENT_ID) {
@@ -312,10 +313,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (isSignedIn && gapiInitialized) {
+    if (isSignedIn) {
       listCalendars();
     }
-  }, [isSignedIn, gapiInitialized, listCalendars]);
+  }, [isSignedIn, listCalendars]);
 
   const handleSignIn = () => {
     if (tokenClient && gapiInitialized && gisInitialized) {
