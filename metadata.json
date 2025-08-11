@@ -1,0 +1,5 @@
+{
+  "name": "Shift Extractor for Google Calendar",
+  "description": "An intelligent tool to automatically extract work shifts from a schedule image and add them to your Google Calendar. Simply configure your name, upload the schedule, and let the AI do the work.",
+  "requestFramePermissions": []
+}
