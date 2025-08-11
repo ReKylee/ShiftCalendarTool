@@ -176,8 +176,9 @@ export default function App() {
         setSelectedCalendarId(workCalendar ? workCalendar.id : items[0].id);
       }
     } catch (e: any) {
+      console.error("Error listing calendars:", e);
       setError(
-        `Failed to list calendars: ${e.result?.error?.message || "Unknown error"}`,
+        `Failed to list calendars: ${e.result?.error?.message || e.message || "Unknown error"}`,
       );
     }
   }, [gapiInitialized, selectedCalendarId]);
