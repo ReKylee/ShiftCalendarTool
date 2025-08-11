@@ -82,10 +82,10 @@ const CheckCircleIcon = () => (
   </svg>
 );
 
-const ExclamationIcon = () => (
+const ExclamationIcon = ({ className = "h-5 w-5 text-red-500" }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    className="h-5 w-5 text-red-500"
+    className={className}
     viewBox="0 0 20 20"
     fill="currentColor"
   >
@@ -158,6 +158,7 @@ export default function App() {
   const [selectedCalendarId, setSelectedCalendarId] = useState<string | null>(
     null,
   );
+  const [forceAdd, setForceAdd] = useState(false);
 
   const [appStep, setAppStep] = useState<AppStep>("CONFIG");
 
@@ -178,7 +179,9 @@ export default function App() {
     } catch (e: any) {
       console.error("Error listing calendars:", e);
       setError(
-        `Failed to list calendars: ${e.result?.error?.message || e.message || "Unknown error"}`,
+        `Failed to list calendars: ${
+          e.result?.error?.message || e.message || "Unknown error"
+        }`,
       );
     }
   }, [gapiInitialized, selectedCalendarId]);
@@ -202,21 +205,26 @@ export default function App() {
             apiKey: API_KEY,
           })
           .then(() => {
-            window.gapi.client.load('calendar', 'v3')
+            window.gapi.client
+              .load("calendar", "v3")
               .then(() => {
                 setGapiInitialized(true);
               })
               .catch((err: any) => {
                 console.error("Error loading Google Calendar API:", err);
                 setError(
-                  `Failed to load Google Calendar API: ${err.details || err.message}`,
+                  `Failed to load Google Calendar API: ${
+                    err.details || err.message
+                  }`,
                 );
               });
           })
           .catch((err: any) => {
             console.error("Error initializing GAPI client:", err);
             setError(
-              `Failed to initialize Google Calendar API: ${err.details || err.message}`,
+              `Failed to initialize Google Calendar API: ${
+                err.details || err.message
+              }`,
             );
           });
       });
@@ -247,7 +255,9 @@ export default function App() {
           error_callback: (error: any) => {
             console.error("Google Sign-In Error:", error);
             setError(
-              `Google Sign-In failed: ${error.message || "Please check your configuration and try again."}`,
+              `Google Sign-In failed: ${
+                error.message || "Please check your configuration and try again."
+              }`,
             );
           },
         });
@@ -256,7 +266,9 @@ export default function App() {
       } catch (err: any) {
         console.error("Error initializing Google Identity Services:", err);
         setError(
-          `Failed to initialize sign-in service: ${err.message || "Unknown error"}`,
+          `Failed to initialize sign-in service: ${
+            err.message || "Unknown error"
+          }`,
         );
       }
     };
@@ -312,20 +324,70 @@ export default function App() {
     }
   };
 
+  const checkForConflicts = async (shifts: Shift[]) => {
+    if (!selectedCalendarId || shifts.length === 0) return shifts;
+
+    setLoadingMessage("Checking for conflicting events...");
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const minDate = shifts.reduce((min, s) => (s.date < min ? s.date : min), shifts[0].date);
+    const maxDate = shifts.reduce((max, s) => (s.date > max ? s.date : max), shifts[0].date);
+
+    try {
+      const response = await window.gapi.client.calendar.events.list({
+        calendarId: selectedCalendarId,
+        timeMin: `${minDate}T00:00:00Z`,
+        timeMax: `${maxDate}T23:59:59Z`,
+        singleEvents: true,
+        orderBy: "startTime",
+      });
+
+      const existingEvents = response.result.items;
+      if (existingEvents.length === 0) return shifts;
+
+      const updatedShifts = shifts.map((shift) => {
+        const shiftStart = new Date(`${shift.date}T${shift.startTime}`).getTime();
+        const shiftEnd = new Date(`${shift.date}T${shift.endTime}`).getTime();
+        const isConflicting = existingEvents.some((event: any) => {
+          const eventStart = new Date(event.start.dateTime).getTime();
+          const eventEnd = new Date(event.end.dateTime).getTime();
+          return shiftStart < eventEnd && shiftEnd > eventStart;
+        });
+        return { ...shift, isConflicting };
+      });
+
+      return updatedShifts;
+    } catch (e: any) {
+      console.error("Error checking for conflicts:", e);
+      setError(
+        `Could not check for calendar conflicts: ${
+          e.result?.error?.message || "Unknown error"
+        }`,
+      );
+      // Return original shifts if conflict check fails
+      return shifts;
+    }
+  };
+
   const handleExtractShifts = async () => {
     if (!imageFile || !userName || !API_KEY) return;
     setIsLoading(true);
     setLoadingMessage("AI is analyzing your schedule...");
     setError(null);
     try {
-      const shifts = await extractShiftsFromImage(imageFile, userName, API_KEY);
-      setExtractedShifts(shifts);
-      if (shifts.length > 0) {
+      const initialShifts = await extractShiftsFromImage(
+        imageFile,
+        userName,
+        API_KEY,
+      );
+      if (initialShifts.length > 0) {
+        const shiftsWithConflicts = await checkForConflicts(initialShifts);
+        setExtractedShifts(shiftsWithConflicts);
         setAppStep("REVIEW");
       } else {
         setError(
           `No shifts found for "${userName}". Please check the name spelling or upload a different image.`,
         );
+        setAppStep("UPLOAD");
       }
     } catch (e: any) {
       setError(e.message || "An unknown error occurred during analysis.");
@@ -337,13 +399,22 @@ export default function App() {
   const handleAddShiftsToCalendar = async () => {
     if (!selectedCalendarId || extractedShifts.length === 0 || !gapiInitialized)
       return;
+
+    const shiftsToAdd = forceAdd
+      ? extractedShifts
+      : extractedShifts.filter((s) => !s.isConflicting);
+
+    if (shiftsToAdd.length === 0) {
+      setError("No shifts to add. All found shifts have conflicts.");
+      setAppStep("REVIEW");
+      return;
+    }
+
     setAppStep("ADDING");
-    setLoadingMessage(
-      `Adding ${extractedShifts.length} shifts to your calendar...`,
-    );
+    setLoadingMessage(`Adding ${shiftsToAdd.length} shifts to your calendar...`);
     setError(null);
 
-    const promises = extractedShifts.map((shift) => {
+    const promises = shiftsToAdd.map((shift) => {
       const event = {
         summary: `Work Shift: ${shift.location}`,
         location: shift.location,
@@ -368,7 +439,9 @@ export default function App() {
       setAppStep("DONE");
     } catch (e: any) {
       setError(
-        `Failed to add events: ${e.result?.error?.message || "Unknown error"}`,
+        `Failed to add events: ${
+          e.result?.error?.message || "Unknown error"
+        }`,
       );
       setAppStep("REVIEW");
     }
@@ -380,12 +453,15 @@ export default function App() {
     setExtractedShifts([]);
     setError(null);
     setIsLoading(false);
+    setForceAdd(false);
     setAppStep("UPLOAD");
   };
 
   const isConfigComplete =
     userName.trim() !== "" && isSignedIn && selectedCalendarId !== null;
   const isApiReady = gisInitialized && gapiInitialized;
+  const conflictingShiftCount = extractedShifts.filter(s => s.isConflicting).length;
+
 
   useEffect(() => {
     if (
@@ -400,6 +476,32 @@ export default function App() {
     if (!isApiReady) return "Initializing Sign-In...";
     return "Sign in with Google";
   };
+
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      const items = event.clipboardData?.items;
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf("image") !== -1) {
+            const file = items[i].getAsFile();
+            if (file) {
+              setImageFile(file);
+              setImagePreview(URL.createObjectURL(file));
+              setError(null);
+              setAppStep("UPLOAD");
+              break;
+            }
+          }
+        }
+      }
+    };
+
+    document.addEventListener("paste", handlePaste);
+
+    return () => {
+      document.removeEventListener("paste", handlePaste);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex flex-col items-center py-8 px-4">
@@ -524,7 +626,9 @@ export default function App() {
                       disabled={!isConfigComplete}
                     />
                   </label>
-                  <p className="mt-2 text-sm text-gray-500">or drag and drop</p>
+                  <p className="mt-2 text-sm text-gray-500">
+                    or drag and drop / paste
+                  </p>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">
                   PNG, JPG, GIF up to 10MB
@@ -583,23 +687,74 @@ export default function App() {
               </p>
             </div>
 
+            {conflictingShiftCount > 0 && (
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 p-4 rounded-lg flex items-start">
+                <ExclamationIcon className="h-5 w-5 text-yellow-500 mt-0.5" />
+                <div className="ml-3">
+                  <p className="font-semibold">
+                    {conflictingShiftCount} Conflicting Events Found
+                  </p>
+                  <p className="text-sm">
+                    Some shifts overlap with existing events in your calendar.
+                    They are marked in red.
+                  </p>
+                  <div className="mt-2">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={forceAdd}
+                        onChange={(e) => setForceAdd(e.target.checked)}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      />
+                      <span className="ml-2 text-sm">
+                        Add conflicting shifts anyway
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="max-h-80 overflow-y-auto pr-2">
               <ul className="space-y-3">
                 {extractedShifts.map((shift, index) => (
                   <li
                     key={index}
-                    className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200 flex items-center space-x-4 hover:shadow-sm transition-shadow"
+                    className={`p-4 rounded-lg border flex items-center space-x-4 transition-all ${
+                      shift.isConflicting
+                        ? "bg-red-50 border-red-200"
+                        : "bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200 hover:shadow-sm"
+                    }`}
                   >
-                    <CalendarIcon />
+                    {shift.isConflicting ? (
+                      <ExclamationIcon className="h-6 w-6 mr-2 text-red-500" />
+                    ) : (
+                      <CalendarIcon />
+                    )}
                     <div className="flex-grow">
-                      <p className="font-semibold text-gray-800">
+                      <p
+                        className={`font-semibold ${
+                          shift.isConflicting
+                            ? "text-red-800"
+                            : "text-gray-800"
+                        }`}
+                      >
                         {shift.date} ({shift.dayOfWeek})
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p
+                        className={`text-sm ${
+                          shift.isConflicting
+                            ? "text-red-700"
+                            : "text-gray-600"
+                        }`}
+                      >
                         {shift.startTime} - {shift.endTime} at{" "}
                         <span className="font-medium text-indigo-600">
                           {shift.location}
                         </span>
+                        {shift.isConflicting && (
+                          <span className="font-bold ml-2">(Conflict)</span>
+                        )}
                       </p>
                     </div>
                   </li>
@@ -616,7 +771,8 @@ export default function App() {
               </button>
               <button
                 onClick={handleAddShiftsToCalendar}
-                className="px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200"
+                disabled={!forceAdd && conflictingShiftCount === extractedShifts.length && extractedShifts.length > 0}
+                className="px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 📅 Add to Calendar
               </button>
@@ -643,7 +799,7 @@ export default function App() {
                   Success! 🎉
                 </h2>
                 <p className="mt-3 text-lg text-gray-600">
-                  {extractedShifts.length} shifts have been added to your
+                  {extractedShifts.filter(s => forceAdd || !s.isConflicting).length} shifts have been added to your
                   calendar.
                 </p>
                 <button

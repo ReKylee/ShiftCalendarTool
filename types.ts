@@ -1,10 +1,11 @@
 
 export interface Shift {
-  date: string; 
-  startTime: string; 
-  endTime: string; 
+  date: string;
+  startTime: string;
+  endTime: string;
   location: string;
   dayOfWeek: string;
+  isConflicting?: boolean;
 }
 
 export interface GoogleCalendar {
