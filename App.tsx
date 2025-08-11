@@ -199,6 +199,7 @@ export default function App() {
       window.gapi.load("client", () => {
         window.gapi.client
           .init({
+            clientId: GOOGLE_CLIENT_ID,
             apiKey: API_KEY,
             discoveryDocs: [
               "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
