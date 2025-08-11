@@ -12,10 +12,8 @@ declare global {
 const API_KEY = import.meta.env.VITE_API_KEY;
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
-const SCOPES = [
-  "https://www.googleapis.com/auth/calendar.events",
-  "https://www.googleapis.com/auth/calendar.readonly",
-];
+const SCOPES =
+  "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly";
 
 // --- SVG Icons ---
 const CalendarIcon = () => (
