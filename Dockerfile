@@ -1,34 +1,40 @@
-# Stage 1: Build the React application
+
+# Stage 1: Build the Vite app
 FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# Copy package files and install dependencies
-COPY package.json package-lock.json ./
-RUN npm install
+# Install dependencies first (better caching)
+COPY package*.json ./
+RUN npm ci
 
-# Copy the rest of the application source code
+# Copy the application source code
 COPY . .
 
-# Define build arguments for secrets
+# Build arguments (secrets passed from Cloud Build)
 ARG VITE_API_KEY
 ARG VITE_GOOGLE_CLIENT_ID
 
-# Build the application
-# Vite will automatically use the build arguments as environment variables.
+# Ensure secrets are available as env vars during build
+ENV VITE_API_KEY=$VITE_API_KEY
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+
+# Build the production version
 RUN npm run build
 
-# Stage 2: Serve the static files with Nginx
+# Stage 2: Serve using Nginx
 FROM nginx:1.25-alpine
 
-# Copy the built assets from the build stage
-COPY --from=build /app/dist /usr/share/nginx/html
-
-# Copy the custom Nginx configuration
+# Remove default config and add our own
+RUN rm /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Expose port 8080 for Cloud Run
+# Copy built files from the previous stage
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# Cloud Run expects the app to listen on $PORT
 EXPOSE 8080
 
-# Start Nginx
+# Start Nginx in foreground
 CMD ["nginx", "-g", "daemon off;"]
+
