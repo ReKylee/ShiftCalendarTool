@@ -32,7 +32,7 @@ export const extractShiftsFromImage = async (
 
   try {
     const response = await genAI.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.5-flash",
       contents: [
         {
           parts: [
