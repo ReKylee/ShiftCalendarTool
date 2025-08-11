@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from "react";
 import { Shift, GoogleCalendar } from "./types";
 import { extractShiftsFromImage } from "./services/geminiService";
@@ -123,12 +124,7 @@ interface StepCardProps {
   children: React.ReactNode;
 }
 
-const StepCard: React.FC<StepCardProps> = ({
-  title,
-  step,
-  isActive,
-  children,
-}) => (
+const StepCard: React.FC<StepCardProps> = ({ title, step, isActive, children }) => (
   <div
     className={`bg-gray-800 rounded-xl shadow-lg transition-all duration-500 ease-in-out transform-gpu ${
       isActive
@@ -169,9 +165,9 @@ export default function App() {
   const [loadingMessage, setLoadingMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const [gapiInitialized, setGapiInitialized] = useState(false);
-  const [gisInitialized, setGisInitialized] = useState(false);
+  const [scriptsLoaded, setScriptsLoaded] = useState(false);
   const [tokenClient, setTokenClient] = useState<any>(null);
+  const [tokenResponse, setTokenResponse] = useState<any>(null);
 
   const [isSignedIn, setIsSignedIn] = useState(
     () => localStorage.getItem("isSignedIn") === "true",
@@ -223,96 +219,19 @@ export default function App() {
   }, [isSignedIn, selectedCalendarId]);
 
   useEffect(() => {
-    if (!API_KEY || !GOOGLE_CLIENT_ID) {
-      setError(
-        "Application is not configured correctly. API credentials were not found. Please check the environment variables.",
-      );
-      return;
-    }
-
     const gapiScript = document.createElement("script");
     gapiScript.src = "https://apis.google.com/js/api.js";
     gapiScript.async = true;
     gapiScript.defer = true;
-    gapiScript.onload = () => {
-      window.gapi.load("client", () => {
-        window.gapi.client
-          .init({})
-          .then(() => {
-            window.gapi.client
-              .load("calendar", "v3")
-              .then(() => {
-                setGapiInitialized(true);
-              })
-              .catch((err: any) => {
-                console.error("Error loading Google Calendar API:", err);
-                setError(
-                  `Failed to load Google Calendar API: ${
-                    err.details || err.message
-                  }`,
-                );
-              });
-          })
-          .catch((err: any) => {
-            console.error("Error initializing GAPI client:", err);
-            setError(
-              `Failed to initialize Google Calendar API: ${
-                err.details || err.message
-              }`,
-            );
-          });
-      });
-    };
-    document.body.appendChild(gapiScript);
+    gapiScript.onload = () => setScriptsLoaded((prev) => prev | true);
 
     const gisScript = document.createElement("script");
     gisScript.src = "https://accounts.google.com/gsi/client";
     gisScript.async = true;
     gisScript.defer = true;
-    gisScript.onload = () => {
-      try {
-        const client = window.google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID,
-          scope: SCOPES,
-          callback: (tokenResponse: any) => {
-            if (tokenResponse && tokenResponse.access_token) {
-              if (window.gapi && window.gapi.client) {
-                window.gapi.client.setToken({
-                  access_token: tokenResponse.access_token,
-                });
-                setIsSignedIn(true);
-                setError(null);
-                // Call listCalendars here to ensure token is set
-                listCalendars();
-              } else {
-                setError("Google API client not ready.");
-              }
-            } else {
-              setError("Authentication failed. Please try again.");
-              setIsSignedIn(false);
-            }
-          },
-          error_callback: (error: any) => {
-            console.error("Google Sign-In Error:", error);
-            setError(
-              `Google Sign-In failed: ${
-                error.message ||
-                "Please check your configuration and try again."
-              }`,
-            );
-          },
-        });
-        setTokenClient(() => client);
-        setGisInitialized(true);
-      } catch (err: any) {
-        console.error("Error initializing Google Identity Services:", err);
-        setError(
-          `Failed to initialize sign-in service: ${
-            err.message || "Unknown error"
-          }`,
-        );
-      }
-    };
+    gisScript.onload = () => setScriptsLoaded((prev) => prev | true);
+
+    document.body.appendChild(gapiScript);
     document.body.appendChild(gisScript);
 
     return () => {
@@ -322,13 +241,60 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (scriptsLoaded) {
+      window.gapi.load("client", () => {
+        window.gapi.client.init({}).then(() => {
+          window.gapi.client.load("calendar", "v3").then(() => {
+            try {
+              const client = window.google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CLIENT_ID,
+                scope: SCOPES,
+                callback: (tokenResponse: any) => {
+                  setTokenResponse(tokenResponse);
+                  if (tokenResponse && tokenResponse.access_token) {
+                    window.gapi.client.setToken({
+                      access_token: tokenResponse.access_token,
+                    });
+                    setIsSignedIn(true);
+                    setError(null); // Clear errors on successful sign-in
+                  } else {
+                    setError("Authentication failed. Please try again.");
+                    setIsSignedIn(false);
+                  }
+                },
+                error_callback: (error: any) => {
+                  console.error("Google Sign-In Error:", error);
+                  setError(
+                    `Google Sign-In failed: ${
+                      error.message ||
+                      "Please check your configuration and try again."
+                    }`,
+                  );
+                },
+              });
+              setTokenClient(() => client);
+            } catch (err: any) {
+              console.error("Error initializing Google Identity Services:", err);
+              setError(
+                `Failed to initialize sign-in service: ${
+                  err.message || "Unknown error"
+                }`,
+              );
+            }
+          });
+        });
+      });
+    }
+  }, [scriptsLoaded]);
+
+  useEffect(() => {
     if (isSignedIn) {
       listCalendars();
     }
   }, [isSignedIn, listCalendars]);
 
   const handleSignIn = () => {
-    if (tokenClient && gapiInitialized && gisInitialized) {
+    if (tokenClient) {
       tokenClient.requestAccessToken();
     } else {
       setError(
@@ -338,9 +304,8 @@ export default function App() {
   };
 
   const handleSignOut = () => {
-    const token = window.gapi.client.getToken();
-    if (token && window.google) {
-      window.google.accounts.oauth2.revoke(token.access_token, () => {
+    if (tokenResponse && window.google) {
+      window.google.accounts.oauth2.revoke(tokenResponse.access_token, () => {
         window.gapi.client.setToken(null);
         setIsSignedIn(false);
         setAppStep("CONFIG");
@@ -376,9 +341,7 @@ export default function App() {
         for (const type of item.types) {
           if (type.startsWith("image/")) {
             const blob = await item.getType(type);
-            const file = new File([blob], "pasted-image.png", {
-              type: blob.type,
-            });
+            const file = new File([blob], "pasted-image.png", { type: blob.type });
             setImageFile(file);
             setImagePreview(URL.createObjectURL(file));
             setError(null);
@@ -421,9 +384,7 @@ export default function App() {
       if (existingEvents.length === 0) return shifts;
 
       const updatedShifts = shifts.map((shift) => {
-        const shiftStart = new Date(
-          `${shift.date}T${shift.startTime}`,
-        ).getTime();
+        const shiftStart = new Date(`${shift.date}T${shift.startTime}`).getTime();
         const shiftEnd = new Date(`${shift.date}T${shift.endTime}`).getTime();
         const isConflicting = existingEvents.some((event: any) => {
           const eventStart = new Date(event.start.dateTime).getTime();
@@ -475,7 +436,7 @@ export default function App() {
   };
 
   const handleAddShiftsToCalendar = async () => {
-    if (!selectedCalendarId || extractedShifts.length === 0 || !gapiInitialized)
+    if (!selectedCalendarId || extractedShifts.length === 0)
       return;
 
     const shiftsToAdd = forceAdd
@@ -489,9 +450,7 @@ export default function App() {
     }
 
     setAppStep("ADDING");
-    setLoadingMessage(
-      `Adding ${shiftsToAdd.length} shifts to your calendar...`,
-    );
+    setLoadingMessage(`Adding ${shiftsToAdd.length} shifts to your calendar...`);
     setError(null);
 
     const promises = shiftsToAdd.map((shift) => {
@@ -519,7 +478,9 @@ export default function App() {
       setAppStep("DONE");
     } catch (e: any) {
       setError(
-        `Failed to add events: ${e.result?.error?.message || "Unknown error"}`,
+        `Failed to add events: ${
+          e.result?.error?.message || "Unknown error"
+        }`,
       );
       setAppStep("REVIEW");
     }
@@ -541,7 +502,7 @@ export default function App() {
 
   const isConfigComplete =
     userName.trim() !== "" && isSignedIn && selectedCalendarId !== null;
-  const isApiReady = gisInitialized && gapiInitialized;
+  const isApiReady = scriptsLoaded;
   const conflictingShiftCount = extractedShifts.filter(
     (s) => s.isConflicting,
   ).length;
@@ -579,11 +540,7 @@ export default function App() {
       )}
 
       <main className="w-full max-w-2xl space-y-6">
-        <StepCard
-          title="Configuration"
-          step={1}
-          isActive={appStep === "CONFIG"}
-        >
+        <StepCard title="Configuration" step={1} isActive={appStep === "CONFIG"}>
           <div className="space-y-6">
             <div>
               <label
@@ -607,8 +564,8 @@ export default function App() {
                 />
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                Enter your name exactly as it appears in Hebrew or English in
-                the schedule
+                Enter your name exactly as it appears in Hebrew or English in the
+                schedule
               </p>
             </div>
 
@@ -658,11 +615,7 @@ export default function App() {
           </div>
         </StepCard>
 
-        <StepCard
-          title="Upload Schedule"
-          step={2}
-          isActive={appStep !== "CONFIG"}
-        >
+        <StepCard title="Upload Schedule" step={2} isActive={appStep !== "CONFIG"}>
           <div className="flex justify-end mb-4">
             <button
               onClick={handleBackToConfig}
@@ -700,7 +653,9 @@ export default function App() {
                     Paste from Clipboard
                   </button>
                 </div>
-                <p className="mt-2 text-sm text-gray-500">or drag and drop</p>
+                <p className="mt-2 text-sm text-gray-500">
+                  or drag and drop
+                </p>
               </div>
             </div>
           </div>
@@ -740,18 +695,14 @@ export default function App() {
           )}
         </StepCard>
 
-        <StepCard
-          title="Review & Confirm"
-          step={3}
-          isActive={appStep === "REVIEW"}
-        >
+        <StepCard title="Review & Confirm" step={3} isActive={appStep === "REVIEW"}>
           <div className="space-y-4">
             <div className="bg-green-900/50 border border-green-700 p-4 rounded-lg">
               <p className="text-sm text-green-300">
                 Found{" "}
-                <span className="font-bold">{extractedShifts.length}</span>{" "}
-                shifts for <span className="font-semibold">{userName}</span>.
-                Please review before adding to your calendar.
+                <span className="font-bold">{extractedShifts.length}</span> shifts
+                for <span className="font-semibold">{userName}</span>. Please
+                review before adding to your calendar.
               </p>
             </div>
 
