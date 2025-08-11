@@ -10,9 +10,9 @@ steps:
       - "-f"
       - Dockerfile
       - "--build-arg"
-      - VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+      - VITE_GOOGLE_CLIENT_ID
       - "--build-arg"
-      - VITE_API_KEY=$VITE_API_KEY
+      - VITE_API_KEY
     id: Build
     secretEnv:
       - VITE_GOOGLE_CLIENT_ID
@@ -34,8 +34,6 @@ steps:
       - "--platform=managed"
       - >-
         --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
-      - >-
-        --labels=managed-by=gcp-cloud-build-deploy-cloud-run,commit-sha=$COMMIT_SHA,gcb-build-id=$BUILD_ID,gcb-trigger-id=$_TRIGGER_ID
       - "--region=$_DEPLOY_REGION"
       - "--quiet"
       - >-
