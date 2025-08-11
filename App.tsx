@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from "react";
 import { Shift, GoogleCalendar } from "./types";
 import { extractShiftsFromImage } from "./services/geminiService";
@@ -141,7 +142,9 @@ const StepCard: React.FC<StepCardProps> = ({
 );
 
 export default function App() {
-  const [userName, setUserName] = useState("");
+  const [userName, setUserName] = useState(
+    () => localStorage.getItem("userName") || "",
+  );
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [extractedShifts, setExtractedShifts] = useState<Shift[]>([]);
@@ -153,14 +156,30 @@ export default function App() {
   const [gisInitialized, setGisInitialized] = useState(false);
   const [tokenClient, setTokenClient] = useState<any>(null);
 
-  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState(
+    () => localStorage.getItem("isSignedIn") === "true",
+  );
   const [calendars, setCalendars] = useState<GoogleCalendar[]>([]);
   const [selectedCalendarId, setSelectedCalendarId] = useState<string | null>(
-    null,
+    () => localStorage.getItem("selectedCalendarId") || null,
   );
   const [forceAdd, setForceAdd] = useState(false);
 
   const [appStep, setAppStep] = useState<AppStep>("CONFIG");
+
+  useEffect(() => {
+    localStorage.setItem("userName", userName);
+  }, [userName]);
+
+  useEffect(() => {
+    localStorage.setItem("isSignedIn", isSignedIn.toString());
+  }, [isSignedIn]);
+
+  useEffect(() => {
+    if (selectedCalendarId) {
+      localStorage.setItem("selectedCalendarId", selectedCalendarId);
+    }
+  }, [selectedCalendarId]);
 
   const listCalendars = useCallback(async () => {
     if (!gapiInitialized) return;
@@ -305,12 +324,16 @@ export default function App() {
         setAppStep("CONFIG");
         setSelectedCalendarId(null);
         setCalendars([]);
+        localStorage.removeItem("isSignedIn");
+        localStorage.removeItem("selectedCalendarId");
       });
     } else {
       setIsSignedIn(false);
       setAppStep("CONFIG");
       setSelectedCalendarId(null);
       setCalendars([]);
+      localStorage.removeItem("isSignedIn");
+      localStorage.removeItem("selectedCalendarId");
     }
   };
 
