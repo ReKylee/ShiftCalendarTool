@@ -10,7 +10,12 @@ RUN npm install
 # Copy the rest of the application source code
 COPY . .
 
+# Define build arguments for secrets
+ARG VITE_API_KEY
+ARG VITE_GOOGLE_CLIENT_ID
+
 # Build the application
+# Vite will automatically use the build arguments as environment variables.
 RUN npm run build
 
 # Stage 2: Serve the static files with Nginx

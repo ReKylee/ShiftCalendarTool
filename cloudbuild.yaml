@@ -1,0 +1,74 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - "--no-cache"
+      - "-t"
+      - >-
+        $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+      - .
+      - "-f"
+      - Dockerfile
+      - "--build-arg"
+      - "VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}"
+      - "--build-arg"
+      - "VITE_API_KEY=${VITE_API_KEY}"
+    id: Build
+    secretEnv:
+      - VITE_GOOGLE_CLIENT_ID
+      - VITE_API_KEY
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - >-
+        $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+    id: Push
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    args:
+      - run
+      - services
+      - update
+      - $_SERVICE_NAME
+      - "--platform=managed"
+      - >-
+        --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+      - >-
+        --labels=managed-by=gcp-cloud-build-deploy-cloud-run,commit-sha=$COMMIT_SHA,gcb-build-id=$BUILD_ID,gcb-trigger-id=$_TRIGGER_ID
+      - "--region=$_DEPLOY_REGION"
+      - "--quiet"
+      - >-
+        --update-secrets=VITE_GOOGLE_CLIENT_ID=OAuthClientID:latest,VITE_API_KEY=GeminiAPI:latest
+    id: Deploy
+    entrypoint: gcloud
+
+images:
+  - >-
+    $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+
+options:
+  substitutionOption: ALLOW_LOOSE
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _TRIGGER_ID: 476847e3-4fc8-48df-92ab-b71548ef4f06
+  _AR_PROJECT_ID: vital-cedar-467510-j1
+  _PLATFORM: managed
+  _SERVICE_NAME: shift-extractor-for-google-calendar
+  REPO_NAME: shiftcalendartool
+  _DEPLOY_REGION: europe-west1
+  _AR_HOSTNAME: europe-west1-docker.pkg.dev
+  _AR_REPOSITORY: cloud-run-source-deploy
+
+tags:
+  - gcp-cloud-build-deploy-cloud-run
+  - gcp-cloud-build-deploy-cloud-run-managed
+  - shift-extractor-for-google-calendar
+
+availableSecrets:
+  - secretManager:
+      - versionName: projects/vital-cedar-467510-j1/secrets/OAuthClientID/versions/latest
+        env: VITE_GOOGLE_CLIENT_ID
+      - versionName: projects/vital-cedar-467510-j1/secrets/GeminiAPI/versions/latest
+        env: VITE_API_KEY
