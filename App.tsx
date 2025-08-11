@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from "react";
 import { Shift, GoogleCalendar } from "./types";
 import { extractShiftsFromImage } from "./services/geminiService";
@@ -521,6 +522,10 @@ export default function App() {
     setAppStep("UPLOAD");
   };
 
+  const handleBackToConfig = () => {
+    setAppStep("CONFIG");
+  };
+
   const isConfigComplete =
     userName.trim() !== "" && isSignedIn && selectedCalendarId !== null;
   const isApiReady = gisInitialized && gapiInitialized;
@@ -637,6 +642,14 @@ export default function App() {
         </StepCard>
 
         <StepCard title="Upload Schedule" step={2} isActive={appStep !== "CONFIG"}>
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={handleBackToConfig}
+              className="text-sm font-medium text-gray-400 hover:text-indigo-400 transition-colors"
+            >
+              &larr; Back to Configuration
+            </button>
+          </div>
           <div className="border-2 border-dashed border-gray-600 rounded-xl hover:border-indigo-500 transition-colors duration-200 bg-gray-800/50">
             <div className="px-6 py-8">
               <div className="text-center">
