@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from "react";
 import { Shift, GoogleCalendar } from "./types";
 import { extractShiftsFromImage } from "./services/geminiService";
@@ -37,7 +36,7 @@ const CalendarIcon = () => (
 const UserIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    className="h-5 w-5 text-gray-400"
+    className="h-5 w-5 text-gray-500"
     viewBox="0 0 20 20"
     fill="currentColor"
   >
@@ -52,7 +51,7 @@ const UserIcon = () => (
 const UploadIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    className="h-12 w-12 mx-auto text-gray-400"
+    className="h-12 w-12 mx-auto text-gray-500"
     fill="none"
     viewBox="0 0 24 24"
     stroke="currentColor"
@@ -66,10 +65,22 @@ const UploadIcon = () => (
   </svg>
 );
 
+const PasteIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    className="h-5 w-5 mr-2"
+    viewBox="0 0 20 20"
+    fill="currentColor"
+  >
+    <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+    <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2h-1.586A1 1 0 0112 2.414L10.414 1A1 1 0 019.586 1H8zm2 6a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+  </svg>
+);
+
 const CheckCircleIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    className="h-16 w-16 text-green-500 mx-auto"
+    className="h-16 w-16 text-green-400 mx-auto"
     fill="none"
     viewBox="0 0 24 24"
     stroke="currentColor"
@@ -99,7 +110,7 @@ const ExclamationIcon = ({ className = "h-5 w-5 text-red-500" }) => (
 );
 
 const Spinner = () => (
-  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-200"></div>
 );
 
 type AppStep = "CONFIG" | "UPLOAD" | "REVIEW" | "ADDING" | "DONE";
@@ -112,31 +123,32 @@ interface StepCardProps {
   children: React.ReactNode;
 }
 
-const StepCard: React.FC<StepCardProps> = ({
-  title,
-  step,
-  isActive,
-  children,
-}) => (
+const StepCard: React.FC<StepCardProps> = ({ title, step, isActive, children }) => (
   <div
-    className={`bg-white rounded-xl shadow-lg transition-all duration-500 ${
-      isActive ? "opacity-100 ring-2 ring-indigo-200" : "opacity-70"
+    className={`bg-gray-800 rounded-xl shadow-lg transition-all duration-500 ease-in-out transform-gpu ${
+      isActive
+        ? "opacity-100 ring-2 ring-indigo-500 scale-100"
+        : "opacity-60 scale-95"
     }`}
   >
     <div className="p-6">
       <div className="flex items-center">
         <div
-          className={`flex items-center justify-center h-10 w-10 rounded-full ${
+          className={`flex items-center justify-center h-10 w-10 rounded-full transition-colors duration-300 ${
             isActive
               ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg"
-              : "bg-gray-200 text-gray-600"
+              : "bg-gray-700 text-gray-400"
           }`}
         >
           {step}
         </div>
-        <h2 className="ml-4 text-xl font-semibold text-gray-700">{title}</h2>
+        <h2 className="ml-4 text-xl font-semibold text-gray-200">{title}</h2>
       </div>
-      {isActive && <div className="mt-6 pl-14">{children}</div>}
+      {isActive && (
+        <div className="mt-6 pl-14 transition-all duration-500 ease-in-out">
+          {children}
+        </div>
+      )}
     </div>
   </div>
 );
@@ -347,13 +359,42 @@ export default function App() {
     }
   };
 
+  const handlePasteFromClipboard = async () => {
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        for (const type of item.types) {
+          if (type.startsWith("image/")) {
+            const blob = await item.getType(type);
+            const file = new File([blob], "pasted-image.png", { type: blob.type });
+            setImageFile(file);
+            setImagePreview(URL.createObjectURL(file));
+            setError(null);
+            setAppStep("UPLOAD");
+            return;
+          }
+        }
+      }
+      setError("No image found in clipboard.");
+    } catch (err) {
+      console.error("Failed to read clipboard contents: ", err);
+      setError("Failed to paste image. Please try again or select a file.");
+    }
+  };
+
   const checkForConflicts = async (shifts: Shift[]) => {
     if (!selectedCalendarId || shifts.length === 0) return shifts;
 
     setLoadingMessage("Checking for conflicting events...");
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const minDate = shifts.reduce((min, s) => (s.date < min ? s.date : min), shifts[0].date);
-    const maxDate = shifts.reduce((max, s) => (s.date > max ? s.date : max), shifts[0].date);
+    const minDate = shifts.reduce(
+      (min, s) => (s.date < min ? s.date : min),
+      shifts[0].date,
+    );
+    const maxDate = shifts.reduce(
+      (max, s) => (s.date > max ? s.date : max),
+      shifts[0].date,
+    );
 
     try {
       const response = await window.gapi.client.calendar.events.list({
@@ -483,8 +524,9 @@ export default function App() {
   const isConfigComplete =
     userName.trim() !== "" && isSignedIn && selectedCalendarId !== null;
   const isApiReady = gisInitialized && gapiInitialized;
-  const conflictingShiftCount = extractedShifts.filter(s => s.isConflicting).length;
-
+  const conflictingShiftCount = extractedShifts.filter(
+    (s) => s.isConflicting,
+  ).length;
 
   useEffect(() => {
     if (
@@ -500,61 +542,31 @@ export default function App() {
     return "Sign in with Google";
   };
 
-  useEffect(() => {
-    const handlePaste = (event: ClipboardEvent) => {
-      const items = event.clipboardData?.items;
-      if (items) {
-        for (let i = 0; i < items.length; i++) {
-          if (items[i].type.indexOf("image") !== -1) {
-            const file = items[i].getAsFile();
-            if (file) {
-              setImageFile(file);
-              setImagePreview(URL.createObjectURL(file));
-              setError(null);
-              setAppStep("UPLOAD");
-              break;
-            }
-          }
-        }
-      }
-    };
-
-    document.addEventListener("paste", handlePaste);
-
-    return () => {
-      document.removeEventListener("paste", handlePaste);
-    };
-  }, []);
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex flex-col items-center py-8 px-4">
+    <div className="min-h-screen bg-gray-900 text-gray-200 flex flex-col items-center py-8 px-4 sm:px-6 lg:px-8">
       <header className="text-center mb-10">
-        <h1 className="text-5xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent tracking-tight">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold bg-gradient-to-r from-indigo-400 to-purple-500 bg-clip-text text-transparent tracking-tight">
           Shift Sync AI
         </h1>
-        <p className="mt-3 text-xl text-gray-600">
+        <p className="mt-3 text-lg sm:text-xl text-gray-400">
           Upload your work schedule and let AI add it to your calendar ✨
         </p>
       </header>
 
       {error && (
-        <div className="bg-red-50 border-l-4 border-red-400 text-red-700 p-4 rounded-lg mb-6 w-full max-w-2xl flex items-center shadow-sm">
-          <ExclamationIcon />
+        <div className="bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg mb-6 w-full max-w-2xl flex items-center shadow-lg animate-pulse">
+          <ExclamationIcon className="h-5 w-5 text-red-400" />
           <span className="ml-3">{error}</span>
         </div>
       )}
 
       <main className="w-full max-w-2xl space-y-6">
-        <StepCard
-          title="Configuration"
-          step={1}
-          isActive={appStep === "CONFIG"}
-        >
+        <StepCard title="Configuration" step={1} isActive={appStep === "CONFIG"}>
           <div className="space-y-6">
             <div>
               <label
                 htmlFor="name"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-gray-300 mb-2"
               >
                 Your Name (as it appears in the schedule)
               </label>
@@ -568,18 +580,18 @@ export default function App() {
                   id="name"
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
-                  className="focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3 px-4"
+                  className="focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm bg-gray-700 border-gray-600 rounded-lg py-3 px-4 text-gray-200 placeholder-gray-500"
                   placeholder="e.g., אלכס, Alex, or אברהם"
                 />
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                Enter your name exactly as it appears in Hebrew or English in
-                the schedule
+                Enter your name exactly as it appears in Hebrew or English in the
+                schedule
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
                 Google Calendar Connection
               </label>
               <div className="mt-1">
@@ -587,7 +599,7 @@ export default function App() {
                   <button
                     onClick={handleSignIn}
                     disabled={!isApiReady}
-                    className="w-full flex items-center justify-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    className="w-full flex items-center justify-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105"
                   >
                     {getSignInButtonText()}
                   </button>
@@ -598,7 +610,7 @@ export default function App() {
                       name="calendar"
                       value={selectedCalendarId || ""}
                       onChange={(e) => setSelectedCalendarId(e.target.value)}
-                      className="block w-full px-4 py-3 text-base border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-lg"
+                      className="block w-full px-4 py-3 text-base bg-gray-700 border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-lg text-gray-200"
                       disabled={calendars.length === 0}
                     >
                       {calendars.length > 0 ? (
@@ -613,7 +625,7 @@ export default function App() {
                     </select>
                     <button
                       onClick={handleSignOut}
-                      className="text-sm text-gray-500 hover:text-indigo-600 transition-colors"
+                      className="text-sm text-gray-400 hover:text-indigo-400 transition-colors"
                     >
                       Sign out
                     </button>
@@ -624,19 +636,15 @@ export default function App() {
           </div>
         </StepCard>
 
-        <StepCard
-          title="Upload Schedule"
-          step={2}
-          isActive={appStep !== "CONFIG"}
-        >
-          <div className="border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 transition-colors duration-200">
+        <StepCard title="Upload Schedule" step={2} isActive={appStep !== "CONFIG"}>
+          <div className="border-2 border-dashed border-gray-600 rounded-xl hover:border-indigo-500 transition-colors duration-200 bg-gray-800/50">
             <div className="px-6 py-8">
               <div className="text-center">
                 <UploadIcon />
-                <div className="mt-4">
+                <div className="mt-4 space-y-2 sm:space-y-0 sm:flex sm:justify-center sm:space-x-4">
                   <label
                     htmlFor="file-upload"
-                    className="cursor-pointer inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-indigo-600 bg-indigo-100 hover:bg-indigo-200 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500 transition-all duration-200"
+                    className="cursor-pointer inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-indigo-300 bg-indigo-900/50 hover:bg-indigo-800/50 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500 transition-all duration-200"
                   >
                     Choose file
                     <input
@@ -649,27 +657,32 @@ export default function App() {
                       disabled={!isConfigComplete}
                     />
                   </label>
-                  <p className="mt-2 text-sm text-gray-500">
-                    or drag and drop / paste
-                  </p>
+                  <button
+                    onClick={handlePasteFromClipboard}
+                    className="inline-flex items-center px-4 py-2 border border-gray-600 text-sm font-medium rounded-lg text-gray-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"
+                    disabled={!isConfigComplete}
+                  >
+                    <PasteIcon />
+                    Paste from Clipboard
+                  </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-2">
-                  PNG, JPG, GIF up to 10MB
+                <p className="mt-2 text-sm text-gray-500">
+                  or drag and drop
                 </p>
               </div>
             </div>
           </div>
 
           {imagePreview && appStep !== "REVIEW" && (
-            <div className="mt-6">
-              <p className="text-sm font-medium text-gray-700 mb-3">
+            <div className="mt-6 animate-fade-in">
+              <p className="text-sm font-medium text-gray-300 mb-3">
                 Image Preview:
               </p>
               <div className="rounded-lg overflow-hidden shadow-lg">
                 <img
                   src={imagePreview}
                   alt="Schedule preview"
-                  className="w-full h-auto max-h-80 object-contain bg-gray-50"
+                  className="w-full h-auto max-h-80 object-contain bg-gray-800"
                 />
               </div>
             </div>
@@ -680,7 +693,7 @@ export default function App() {
               <button
                 onClick={handleExtractShifts}
                 disabled={isLoading || !isConfigComplete}
-                className="w-full flex items-center justify-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                className="w-full flex items-center justify-center px-6 py-3 border border-transparent rounded-lg shadow-lg text-base font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105"
               >
                 {isLoading ? (
                   <>
@@ -695,24 +708,20 @@ export default function App() {
           )}
         </StepCard>
 
-        <StepCard
-          title="Review & Confirm"
-          step={3}
-          isActive={appStep === "REVIEW"}
-        >
+        <StepCard title="Review & Confirm" step={3} isActive={appStep === "REVIEW"}>
           <div className="space-y-4">
-            <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-sm text-green-800">
+            <div className="bg-green-900/50 border border-green-700 p-4 rounded-lg">
+              <p className="text-sm text-green-300">
                 Found{" "}
-                <span className="font-bold">{extractedShifts.length}</span>{" "}
-                shifts for <span className="font-semibold">{userName}</span>.
-                Please review before adding to your calendar.
+                <span className="font-bold">{extractedShifts.length}</span> shifts
+                for <span className="font-semibold">{userName}</span>. Please
+                review before adding to your calendar.
               </p>
             </div>
 
             {conflictingShiftCount > 0 && (
-              <div className="bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 p-4 rounded-lg flex items-start">
-                <ExclamationIcon className="h-5 w-5 text-yellow-500 mt-0.5" />
+              <div className="bg-yellow-900/50 border border-yellow-700 text-yellow-300 p-4 rounded-lg flex items-start">
+                <ExclamationIcon className="h-5 w-5 text-yellow-400 mt-0.5" />
                 <div className="ml-3">
                   <p className="font-semibold">
                     {conflictingShiftCount} Conflicting Events Found
@@ -727,7 +736,7 @@ export default function App() {
                         type="checkbox"
                         checked={forceAdd}
                         onChange={(e) => setForceAdd(e.target.checked)}
-                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        className="h-4 w-4 text-indigo-500 focus:ring-indigo-400 bg-gray-700 border-gray-600 rounded"
                       />
                       <span className="ml-2 text-sm">
                         Add conflicting shifts anyway
@@ -743,14 +752,14 @@ export default function App() {
                 {extractedShifts.map((shift, index) => (
                   <li
                     key={index}
-                    className={`p-4 rounded-lg border flex items-center space-x-4 transition-all ${
+                    className={`p-4 rounded-lg border flex items-center space-x-4 transition-all duration-300 ${
                       shift.isConflicting
-                        ? "bg-red-50 border-red-200"
-                        : "bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200 hover:shadow-sm"
+                        ? "bg-red-900/50 border-red-700"
+                        : "bg-gray-800/50 border-gray-700 hover:shadow-indigo-500/10 hover:shadow-lg"
                     }`}
                   >
                     {shift.isConflicting ? (
-                      <ExclamationIcon className="h-6 w-6 mr-2 text-red-500" />
+                      <ExclamationIcon className="h-6 w-6 mr-2 text-red-400" />
                     ) : (
                       <CalendarIcon />
                     )}
@@ -758,8 +767,8 @@ export default function App() {
                       <p
                         className={`font-semibold ${
                           shift.isConflicting
-                            ? "text-red-800"
-                            : "text-gray-800"
+                            ? "text-red-300"
+                            : "text-gray-200"
                         }`}
                       >
                         {shift.date} ({shift.dayOfWeek})
@@ -767,12 +776,12 @@ export default function App() {
                       <p
                         className={`text-sm ${
                           shift.isConflicting
-                            ? "text-red-700"
-                            : "text-gray-600"
+                            ? "text-red-400"
+                            : "text-gray-400"
                         }`}
                       >
                         {shift.startTime} - {shift.endTime} at{" "}
-                        <span className="font-medium text-indigo-600">
+                        <span className="font-medium text-indigo-400">
                           {shift.location}
                         </span>
                         {shift.isConflicting && (
@@ -785,17 +794,21 @@ export default function App() {
               </ul>
             </div>
 
-            <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+            <div className="flex flex-col sm:flex-row justify-between items-center pt-4 border-t border-gray-700">
               <button
                 onClick={handleStartOver}
-                className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors"
+                className="text-sm font-medium text-gray-400 hover:text-indigo-400 transition-colors mb-4 sm:mb-0"
               >
                 ← Start Over
               </button>
               <button
                 onClick={handleAddShiftsToCalendar}
-                disabled={!forceAdd && conflictingShiftCount === extractedShifts.length && extractedShifts.length > 0}
-                className="px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={
+                  !forceAdd &&
+                  conflictingShiftCount === extractedShifts.length &&
+                  extractedShifts.length > 0
+                }
+                className="w-full sm:w-auto px-6 py-3 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105"
               >
                 📅 Add to Calendar
               </button>
@@ -804,30 +817,33 @@ export default function App() {
         </StepCard>
 
         {(appStep === "ADDING" || appStep === "DONE") && (
-          <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+          <div className="bg-gray-800 rounded-xl shadow-lg p-8 text-center animate-fade-in">
             {appStep === "ADDING" ? (
               <>
                 <div className="flex justify-center mb-6">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-400"></div>
                 </div>
-                <h2 className="text-2xl font-semibold text-gray-700 mb-2">
+                <h2 className="text-2xl font-semibold text-gray-200 mb-2">
                   {loadingMessage}
                 </h2>
-                <p className="text-gray-500">Please wait...</p>
+                <p className="text-gray-400">Please wait...</p>
               </>
             ) : (
               <>
                 <CheckCircleIcon />
-                <h2 className="mt-6 text-3xl font-bold text-gray-800">
+                <h2 className="mt-6 text-3xl font-bold text-gray-100">
                   Success! 🎉
                 </h2>
-                <p className="mt-3 text-lg text-gray-600">
-                  {extractedShifts.filter(s => forceAdd || !s.isConflicting).length} shifts have been added to your
-                  calendar.
+                <p className="mt-3 text-lg text-gray-300">
+                  {
+                    extractedShifts.filter((s) => forceAdd || !s.isConflicting)
+                      .length
+                  }{' '}
+                  shifts have been added to your calendar.
                 </p>
                 <button
                   onClick={handleStartOver}
-                  className="mt-8 px-8 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"
+                  className="mt-8 px-8 py-3 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105"
                 >
                   Process Another Schedule
                 </button>
