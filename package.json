@@ -12,6 +12,7 @@
     "@google/genai": "^1.13.0",
     "@googleapis/calendar": "^11.0.1",
     "@types/gapi": "^0.0.47",
+    "googleapis": "^155.0.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
