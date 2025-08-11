@@ -45,8 +45,8 @@ const schema = {
 
 
 export const extractShiftsFromImage = async (imageFile: File, userName: string, apiKey: string): Promise<Shift[]> => {
-  if (!apiKey || apiKey.startsWith('%%')) {
-    throw new Error("Application is not configured correctly. The API_KEY is missing or has not been injected.");
+  if (!apiKey) {
+    throw new Error("Application is not configured correctly. The API_KEY is missing.");
   }
   const ai = new GoogleGenAI({ apiKey });
   

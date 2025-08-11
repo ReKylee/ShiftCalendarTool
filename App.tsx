@@ -7,17 +7,11 @@ declare global {
   interface Window {
     gapi: any;
     google: any; // For Google Identity Services
-    __env__: {
-      API_KEY: string;
-      GOOGLE_CLIENT_ID: string;
-    }
   }
 }
 
-// Read config injected by the server into index.html
-const config = window.__env__ || { API_KEY: '', GOOGLE_CLIENT_ID: '' };
-const API_KEY = config.API_KEY;
-const GOOGLE_CLIENT_ID = config.GOOGLE_CLIENT_ID;
+const API_KEY = import.meta.env.VITE_API_KEY;
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 const SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly';
 
@@ -88,8 +82,8 @@ export default function App() {
   const [gapiReady, setGapiReady] = useState(false);
   
   useEffect(() => {
-    if (!API_KEY || !GOOGLE_CLIENT_ID || API_KEY.startsWith('%%')) {
-      setError("Application is not configured correctly. API credentials were not properly injected by the server. Please check the deployment configuration.");
+    if (!API_KEY || !GOOGLE_CLIENT_ID) {
+      setError("Application is not configured correctly. API credentials were not found. Please check the environment variables.");
     }
   }, []);
 
@@ -110,7 +104,7 @@ export default function App() {
 
   // Robust Google API initialization, using environment variables
   useEffect(() => {
-    if (!API_KEY || !GOOGLE_CLIENT_ID || API_KEY.startsWith('%%')) return;
+    if (!API_KEY || !GOOGLE_CLIENT_ID) return;
 
     let gapiInitAttempted = false;
     let gisInitAttempted = false;
@@ -397,7 +391,7 @@ export default function App() {
                         <div className="flex justify-center mb-4"><Spinner/></div>
                         <h2 className="text-xl font-semibold text-gray-700">{loadingMessage}</h2>
                         <p className="text-gray-500 mt-2">Please wait...</p>
-                    </>
+                    </> 
                 ) : (
                     <>
                         <CheckCircleIcon/>
@@ -415,3 +409,4 @@ export default function App() {
     </div>
   );
 }
+
