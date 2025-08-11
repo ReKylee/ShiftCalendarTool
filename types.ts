@@ -1,4 +1,3 @@
-
 export interface Shift {
   date: string;
   startTime: string;
@@ -6,6 +5,7 @@ export interface Shift {
   location: string;
   dayOfWeek: string;
   isConflicting?: boolean;
+  selected: boolean;
 }
 
 export interface GoogleCalendar {
