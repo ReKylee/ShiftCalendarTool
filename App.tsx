@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Shift, GoogleCalendar } from "./types";
 import { extractShiftsFromImage } from "./services/geminiService";
 
-import { google } from 'googleapis';
+import { google } from "googleapis";
 
 declare global {
   interface Window {
@@ -234,10 +234,15 @@ export default function App() {
                 access_token: tokenResponse.access_token,
               });
               setIsSignedIn(true);
-              setError(null);
+              setError(null); // Clear errors on successful sign-in
+
+              const auth = new google.auth.OAuth2();
+              auth.setCredentials({ access_token: tokenResponse.access_token });
+              setCalendarClient(google.calendar({ version: "v3", auth }));
             } else {
               setError("Authentication failed. Please try again.");
               setIsSignedIn(false);
+              setCalendarClient(null);
             }
           },
           error_callback: (error: any) => {
@@ -289,6 +294,7 @@ export default function App() {
         setAppStep("CONFIG");
         setSelectedCalendarId(null);
         setCalendars([]);
+        setCalendarClient(null);
       });
     } else {
       setIsSignedIn(false);
@@ -353,7 +359,7 @@ export default function App() {
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         },
       };
-      return window.gapi.client.calendar.events.insert({
+      return calendarClient.events.insert({
         calendarId: selectedCalendarId,
         resource: event,
       });
