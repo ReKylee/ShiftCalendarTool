@@ -199,13 +199,19 @@ export default function App() {
       window.gapi.load("client", () => {
         window.gapi.client
           .init({
-            clientId: GOOGLE_CLIENT_ID,
             apiKey: API_KEY,
-            scope: SCOPES,
           })
-          .then(() => window.gapi.client.load("calendar", "v3"))
           .then(() => {
-            setGapiInitialized(true);
+            window.gapi.client.load('calendar', 'v3')
+              .then(() => {
+                setGapiInitialized(true);
+              })
+              .catch((err: any) => {
+                console.error("Error loading Google Calendar API:", err);
+                setError(
+                  `Failed to load Google Calendar API: ${err.details || err.message}`,
+                );
+              });
           })
           .catch((err: any) => {
             console.error("Error initializing GAPI client:", err);
