@@ -10,9 +10,9 @@ steps:
       - "-f"
       - Dockerfile
       - "--build-arg"
-      - VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
+      - VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
       - "--build-arg"
-      - VITE_API_KEY=${VITE_API_KEY}
+      - VITE_API_KEY=$VITE_API_KEY
     id: Build
     secretEnv:
       - VITE_GOOGLE_CLIENT_ID
