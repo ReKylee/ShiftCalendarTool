@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Shift, GoogleCalendar } from "./types";
 import { extractShiftsFromImage } from "./services/geminiService";
 
-import { google } from "googleapis";
-
 declare global {
   interface Window {
     gapi: any;
@@ -165,13 +163,11 @@ export default function App() {
 
   const [appStep, setAppStep] = useState<AppStep>("CONFIG");
 
-  const [calendarClient, setCalendarClient] = useState<any>(null);
-
   const listCalendars = useCallback(async () => {
-    if (!calendarClient) return;
+    if (!gapiInitialized) return;
     try {
-      const response = await calendarClient.calendarList.list();
-      const items = response.data.items.filter(
+      const response = await window.gapi.client.calendar.calendarList.list();
+      const items = response.result.items.filter(
         (cal: any) => cal.accessRole === "owner" || cal.accessRole === "writer",
       );
       setCalendars(items);
@@ -183,10 +179,10 @@ export default function App() {
       }
     } catch (e: any) {
       setError(
-        `Failed to list calendars: ${e.response?.data?.error?.message || "Unknown error"}`,
+        `Failed to list calendars: ${e.result?.error?.message || "Unknown error"}`,
       );
     }
-  }, [calendarClient, selectedCalendarId]);
+  }, [gapiInitialized, selectedCalendarId]);
 
   useEffect(() => {
     if (!API_KEY || !GOOGLE_CLIENT_ID) {
@@ -235,14 +231,9 @@ export default function App() {
               });
               setIsSignedIn(true);
               setError(null); // Clear errors on successful sign-in
-
-              const auth = new google.auth.OAuth2();
-              auth.setCredentials({ access_token: tokenResponse.access_token });
-              setCalendarClient(google.calendar({ version: "v3", auth }));
             } else {
               setError("Authentication failed. Please try again.");
               setIsSignedIn(false);
-              setCalendarClient(null);
             }
           },
           error_callback: (error: any) => {
@@ -294,7 +285,6 @@ export default function App() {
         setAppStep("CONFIG");
         setSelectedCalendarId(null);
         setCalendars([]);
-        setCalendarClient(null);
       });
     } else {
       setIsSignedIn(false);
@@ -359,7 +349,7 @@ export default function App() {
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         },
       };
-      return calendarClient.events.insert({
+      return window.gapi.client.calendar.events.insert({
         calendarId: selectedCalendarId,
         resource: event,
       });
