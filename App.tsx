@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from "react";
 import { Shift, GoogleCalendar } from "./types";
 import { extractShiftsFromImage } from "./services/geminiService";
@@ -124,7 +123,12 @@ interface StepCardProps {
   children: React.ReactNode;
 }
 
-const StepCard: React.FC<StepCardProps> = ({ title, step, isActive, children }) => (
+const StepCard: React.FC<StepCardProps> = ({
+  title,
+  step,
+  isActive,
+  children,
+}) => (
   <div
     className={`bg-gray-800 rounded-xl shadow-lg transition-all duration-500 ease-in-out transform-gpu ${
       isActive
@@ -233,9 +237,7 @@ export default function App() {
     gapiScript.onload = () => {
       window.gapi.load("client", () => {
         window.gapi.client
-          .init({
-            apiKey: API_KEY,
-          })
+          .init({})
           .then(() => {
             window.gapi.client
               .load("calendar", "v3")
@@ -274,11 +276,17 @@ export default function App() {
           scope: SCOPES,
           callback: (tokenResponse: any) => {
             if (tokenResponse && tokenResponse.access_token) {
-              window.gapi.client.setToken({
-                access_token: tokenResponse.access_token,
-              });
-              setIsSignedIn(true);
-              setError(null); // Clear errors on successful sign-in
+              if (window.gapi && window.gapi.client) {
+                window.gapi.client.setToken({
+                  access_token: tokenResponse.access_token,
+                });
+                setIsSignedIn(true);
+                setError(null);
+                // Call listCalendars here to ensure token is set
+                listCalendars();
+              } else {
+                setError("Google API client not ready.");
+              }
             } else {
               setError("Authentication failed. Please try again.");
               setIsSignedIn(false);
@@ -288,7 +296,8 @@ export default function App() {
             console.error("Google Sign-In Error:", error);
             setError(
               `Google Sign-In failed: ${
-                error.message || "Please check your configuration and try again."
+                error.message ||
+                "Please check your configuration and try again."
               }`,
             );
           },
@@ -367,7 +376,9 @@ export default function App() {
         for (const type of item.types) {
           if (type.startsWith("image/")) {
             const blob = await item.getType(type);
-            const file = new File([blob], "pasted-image.png", { type: blob.type });
+            const file = new File([blob], "pasted-image.png", {
+              type: blob.type,
+            });
             setImageFile(file);
             setImagePreview(URL.createObjectURL(file));
             setError(null);
@@ -410,7 +421,9 @@ export default function App() {
       if (existingEvents.length === 0) return shifts;
 
       const updatedShifts = shifts.map((shift) => {
-        const shiftStart = new Date(`${shift.date}T${shift.startTime}`).getTime();
+        const shiftStart = new Date(
+          `${shift.date}T${shift.startTime}`,
+        ).getTime();
         const shiftEnd = new Date(`${shift.date}T${shift.endTime}`).getTime();
         const isConflicting = existingEvents.some((event: any) => {
           const eventStart = new Date(event.start.dateTime).getTime();
@@ -476,7 +489,9 @@ export default function App() {
     }
 
     setAppStep("ADDING");
-    setLoadingMessage(`Adding ${shiftsToAdd.length} shifts to your calendar...`);
+    setLoadingMessage(
+      `Adding ${shiftsToAdd.length} shifts to your calendar...`,
+    );
     setError(null);
 
     const promises = shiftsToAdd.map((shift) => {
@@ -504,9 +519,7 @@ export default function App() {
       setAppStep("DONE");
     } catch (e: any) {
       setError(
-        `Failed to add events: ${
-          e.result?.error?.message || "Unknown error"
-        }`,
+        `Failed to add events: ${e.result?.error?.message || "Unknown error"}`,
       );
       setAppStep("REVIEW");
     }
@@ -566,7 +579,11 @@ export default function App() {
       )}
 
       <main className="w-full max-w-2xl space-y-6">
-        <StepCard title="Configuration" step={1} isActive={appStep === "CONFIG"}>
+        <StepCard
+          title="Configuration"
+          step={1}
+          isActive={appStep === "CONFIG"}
+        >
           <div className="space-y-6">
             <div>
               <label
@@ -590,8 +607,8 @@ export default function App() {
                 />
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                Enter your name exactly as it appears in Hebrew or English in the
-                schedule
+                Enter your name exactly as it appears in Hebrew or English in
+                the schedule
               </p>
             </div>
 
@@ -641,7 +658,11 @@ export default function App() {
           </div>
         </StepCard>
 
-        <StepCard title="Upload Schedule" step={2} isActive={appStep !== "CONFIG"}>
+        <StepCard
+          title="Upload Schedule"
+          step={2}
+          isActive={appStep !== "CONFIG"}
+        >
           <div className="flex justify-end mb-4">
             <button
               onClick={handleBackToConfig}
@@ -679,9 +700,7 @@ export default function App() {
                     Paste from Clipboard
                   </button>
                 </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  or drag and drop
-                </p>
+                <p className="mt-2 text-sm text-gray-500">or drag and drop</p>
               </div>
             </div>
           </div>
@@ -721,14 +740,18 @@ export default function App() {
           )}
         </StepCard>
 
-        <StepCard title="Review & Confirm" step={3} isActive={appStep === "REVIEW"}>
+        <StepCard
+          title="Review & Confirm"
+          step={3}
+          isActive={appStep === "REVIEW"}
+        >
           <div className="space-y-4">
             <div className="bg-green-900/50 border border-green-700 p-4 rounded-lg">
               <p className="text-sm text-green-300">
                 Found{" "}
-                <span className="font-bold">{extractedShifts.length}</span> shifts
-                for <span className="font-semibold">{userName}</span>. Please
-                review before adding to your calendar.
+                <span className="font-bold">{extractedShifts.length}</span>{" "}
+                shifts for <span className="font-semibold">{userName}</span>.
+                Please review before adding to your calendar.
               </p>
             </div>
 
@@ -779,18 +802,14 @@ export default function App() {
                     <div className="flex-grow">
                       <p
                         className={`font-semibold ${
-                          shift.isConflicting
-                            ? "text-red-300"
-                            : "text-gray-200"
+                          shift.isConflicting ? "text-red-300" : "text-gray-200"
                         }`}
                       >
                         {shift.date} ({shift.dayOfWeek})
                       </p>
                       <p
                         className={`text-sm ${
-                          shift.isConflicting
-                            ? "text-red-400"
-                            : "text-gray-400"
+                          shift.isConflicting ? "text-red-400" : "text-gray-400"
                         }`}
                       >
                         {shift.startTime} - {shift.endTime} at{" "}
@@ -851,7 +870,7 @@ export default function App() {
                   {
                     extractedShifts.filter((s) => forceAdd || !s.isConflicting)
                       .length
-                  }{' '}
+                  }{" "}
                   shifts have been added to your calendar.
                 </p>
                 <button
