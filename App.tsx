@@ -2,10 +2,12 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Shift, GoogleCalendar } from "./types";
 import { extractShiftsFromImage } from "./services/geminiService";
 
+import { google } from 'googleapis';
+
 declare global {
   interface Window {
     gapi: any;
-    google: any;
+    google: any; // For Google Identity Services
   }
 }
 
@@ -151,24 +153,25 @@ export default function App() {
   const [loadingMessage, setLoadingMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const [gapiInitialized, setGapiInitialized] = useState(false);
+  const [gisInitialized, setGisInitialized] = useState(false);
+  const [tokenClient, setTokenClient] = useState<any>(null);
+
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [calendars, setCalendars] = useState<GoogleCalendar[]>([]);
   const [selectedCalendarId, setSelectedCalendarId] = useState<string | null>(
     null,
   );
 
-  // Missing state variables
-  const [gapiInitialized, setGapiInitialized] = useState(false);
-  const [gisInitialized, setGisInitialized] = useState(false);
-  const [tokenClient, setTokenClient] = useState<any>(null);
-
   const [appStep, setAppStep] = useState<AppStep>("CONFIG");
 
+  const [calendarClient, setCalendarClient] = useState<any>(null);
+
   const listCalendars = useCallback(async () => {
-    if (!gapiInitialized) return;
+    if (!calendarClient) return;
     try {
-      const response = await window.gapi.client.calendar.calendarList.list();
-      const items = response.result.items.filter(
+      const response = await calendarClient.calendarList.list();
+      const items = response.data.items.filter(
         (cal: any) => cal.accessRole === "owner" || cal.accessRole === "writer",
       );
       setCalendars(items);
@@ -180,10 +183,10 @@ export default function App() {
       }
     } catch (e: any) {
       setError(
-        `Failed to list calendars: ${e.result?.error?.message || "Unknown error"}`,
+        `Failed to list calendars: ${e.response?.data?.error?.message || "Unknown error"}`,
       );
     }
-  }, [gapiInitialized, selectedCalendarId]);
+  }, [calendarClient, selectedCalendarId]);
 
   useEffect(() => {
     if (!API_KEY || !GOOGLE_CLIENT_ID) {
@@ -202,9 +205,6 @@ export default function App() {
         window.gapi.client
           .init({
             apiKey: API_KEY,
-            discoveryDocs: [
-              "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
-            ],
           })
           .then(() => {
             setGapiInitialized(true);
