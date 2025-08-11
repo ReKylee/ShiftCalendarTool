@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from "react";
 import { Shift, GoogleCalendar } from "./types";
 import { extractShiftsFromImage } from "./services/geminiService";
@@ -132,7 +131,7 @@ const StepCard: React.FC<StepCardProps> = ({ title, step, isActive, children }) 
         : "opacity-60 scale-95"
     }`}
   >
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="flex items-center">
         <div
           className={`flex items-center justify-center h-10 w-10 rounded-full transition-colors duration-300 ${
@@ -146,7 +145,7 @@ const StepCard: React.FC<StepCardProps> = ({ title, step, isActive, children }) 
         <h2 className="ml-4 text-xl font-semibold text-gray-200">{title}</h2>
       </div>
       {isActive && (
-        <div className="mt-6 pl-14 transition-all duration-500 ease-in-out">
+        <div className="mt-6 pl-0 sm:pl-14 transition-all duration-500 ease-in-out">
           {children}
         </div>
       )}
