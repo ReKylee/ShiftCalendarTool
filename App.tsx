@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Shift, GoogleCalendar } from "./types";
 import { extractShiftsFromImage } from "./services/geminiService";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence } from "framer-motion";
 
+// --- Declarations, Interfaces, and SVGs ---
 declare global {
   interface Window {
     gapi: any;
@@ -14,24 +15,6 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 const SCOPES =
   "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly";
-
-// --- SVG Icons ---
-const CalendarIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    className="h-6 w-6 mr-2"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-    />
-  </svg>
-);
 
 const UserIcon = () => (
   <svg
@@ -51,7 +34,7 @@ const UserIcon = () => (
 const UploadIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    className="h-12 w-12 mx-auto text-gray-500"
+    className="h-12 w-12 mx-auto text-gray-400"
     fill="none"
     viewBox="0 0 24 24"
     stroke="currentColor"
@@ -113,32 +96,208 @@ const Spinner = () => (
   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-200"></div>
 );
 
-type AppStep = "CONFIG" | "UPLOAD" | "REVIEW" | "ADDING" | "DONE";
+const CheckIcon = () => (
+  <svg
+    className="w-6 h-6 text-white"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="3"
+      d="M5 13l4 4L19 7"
+    />
+  </svg>
+);
 
-// --- UI Components ---
-interface StepCardProps {
-  title: string;
-  step: number;
-  children: React.ReactNode;
+// --- Animation Variants ---
+const buttonHoverTapVariants = {
+  hover: {
+    scale: 1.05,
+    transition: { type: "spring", stiffness: 400, damping: 17 },
+  },
+  tap: { scale: 0.95 },
+};
+
+const listVariants = {
+  visible: { transition: { staggerChildren: 0.05 } },
+  hidden: {},
+};
+
+const listItemVariants = {
+  visible: { opacity: 1, x: 0 },
+  hidden: { opacity: 0, x: -20 },
+};
+
+// --- Stepper Component ---
+interface StepperProps {
+  steps: string[];
+  currentStep: number;
+}
+const Stepper: React.FC<StepperProps> = ({ steps, currentStep }) => {
+  return (
+    <div className="flex items-center justify-between w-full mb-8 px-4">
+      {steps.map((step, i) => (
+        <React.Fragment key={step}>
+          <div className="flex flex-col items-center relative">
+            <div
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors duration-300 z-10 ${
+                currentStep > i
+                  ? "bg-green-500 shadow-lg shadow-green-500/30"
+                  : currentStep === i
+                    ? "bg-indigo-500 shadow-lg shadow-indigo-500/30"
+                    : "bg-gray-700"
+              }`}
+            >
+              {currentStep > i ? (
+                <CheckIcon />
+              ) : (
+                <span className="font-bold text-gray-200">{i + 1}</span>
+              )}
+            </div>
+            <p
+              className={`mt-2 text-xs sm:text-sm text-center font-semibold transition-colors duration-300 ${currentStep >= i ? "text-gray-200" : "text-gray-500"}`}
+            >
+              {step}
+            </p>
+          </div>
+          {i < steps.length - 1 && (
+            <div className="flex-1 h-1 bg-gray-700 mx-2 sm:mx-4 relative">
+              {currentStep > i && (
+                <motion.div
+                  className="absolute top-0 left-0 h-1 bg-green-500"
+                  initial={{ width: 0 }}
+                  animate={{ width: "100%" }}
+                  transition={{ duration: 0.5, ease: "easeInOut" }}
+                />
+              )}
+            </div>
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
+
+// --- FileUpload Component ---
+interface FileUploadProps {
+  onFileSelect: (file: File) => void;
+  disabled: boolean;
 }
 
-const StepCard: React.FC<StepCardProps> = ({ title, step, children }) => (
+const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }) => {
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) onFileSelect(file);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    if (disabled) return;
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith("image/")) {
+      onFileSelect(file);
+    }
+  };
+
+  const handlePasteFromClipboard = async () => {
+    if (disabled) return;
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        for (const type of item.types) {
+          if (type.startsWith("image/")) {
+            const blob = await item.getType(type);
+            const file = new File([blob], "pasted-image.png", {
+              type: blob.type,
+            });
+            onFileSelect(file);
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to read clipboard contents: ", err);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) =>
+    e.preventDefault();
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(true);
+  };
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+  };
+
+  return (
+    <div
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      className={`border-2 border-dashed rounded-xl transition-all duration-300 ${
+        disabled ? "cursor-not-allowed opacity-50" : ""
+      } ${
+        isDraggingOver
+          ? "border-indigo-400 bg-indigo-500/10 ring-4 ring-indigo-500/20"
+          : "border-gray-600 hover:border-indigo-500 bg-gray-900/50"
+      }`}
+    >
+      <div className="px-6 py-10">
+        <div className="text-center">
+          <UploadIcon />
+          <p className="mt-2 text-sm text-gray-400 font-semibold">
+            Drag & drop your schedule image here
+          </p>
+          <div className="mt-4 space-y-2 sm:space-y-0 sm:flex sm:justify-center sm:space-x-4">
+            <label
+              htmlFor="file-upload"
+              className={`cursor-pointer inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-indigo-300 bg-indigo-900/50 hover:bg-indigo-800/50 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500 transition-all duration-200 ${disabled ? "pointer-events-none" : ""}`}
+            >
+              Choose file
+              <input
+                id="file-upload"
+                name="file-upload"
+                type="file"
+                className="sr-only"
+                accept="image/*"
+                onChange={handleFileChange}
+                disabled={disabled}
+              />
+            </label>
+            <button
+              onClick={handlePasteFromClipboard}
+              className={`inline-flex items-center px-4 py-2 border border-gray-600 text-sm font-medium rounded-lg text-gray-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 ${disabled ? "pointer-events-none" : ""}`}
+              disabled={disabled}
+            >
+              <PasteIcon /> Paste
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- StepCard Component ---
+const StepCard: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <motion.div
+    layout="position"
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     exit={{ opacity: 0, y: -20 }}
-    transition={{ duration: 0.3 }}
-    className="bg-gray-800 rounded-xl shadow-lg ring-2 ring-indigo-500/50"
+    transition={{ duration: 0.4, type: "spring", stiffness: 200, damping: 25 }}
+    className="bg-gray-800/60 backdrop-blur-md rounded-xl shadow-lg ring-1 ring-white/10"
   >
-    <div className="p-4 sm:p-6">
-      <div className="flex items-center">
-        <div className="flex items-center justify-center h-10 w-10 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg">
-          {step}
-        </div>
-        <h2 className="ml-4 text-xl font-semibold text-gray-200">{title}</h2>
-      </div>
-      <div className="mt-6 pl-0 sm:pl-14">{children}</div>
-    </div>
+    <div className="p-6 sm:p-8">{children}</div>
   </motion.div>
 );
 
@@ -152,10 +311,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
-
   const [isApiReady, setIsApiReady] = useState(false);
   const [tokenClient, setTokenClient] = useState<any>(null);
-
   const [isSignedIn, setIsSignedIn] = useState(
     () => localStorage.getItem("isSignedIn") === "true",
   );
@@ -164,16 +321,28 @@ export default function App() {
     () => localStorage.getItem("selectedCalendarId") || null,
   );
 
+  type AppStep = "CONFIG" | "UPLOAD" | "REVIEW" | "ADDING" | "DONE";
   const [appStep, setAppStep] = useState<AppStep>("CONFIG");
+
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.innerHTML = `
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
+            body {
+                font-family: 'Inter', sans-serif;
+                background-color: #030712; /* bg-gray-950 */
+                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%239CA3AF' fill-opacity='0.04'%3E%3Cpath d='M0 38.59l2.83-2.83 1.41 1.41L1.41 40H0v-1.41zM0 1.4l2.83 2.83 1.41-1.41L1.41 0H0v1.41zM38.59 40l-2.83-2.83 1.41-1.41L40 38.59V40h-1.41zM40 1.4l-2.83 2.83-1.41-1.41L38.59 0H40v1.41z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            }
+        `;
+    document.head.appendChild(style);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("userName", userName);
   }, [userName]);
-
   useEffect(() => {
     localStorage.setItem("isSignedIn", isSignedIn.toString());
   }, [isSignedIn]);
-
   useEffect(() => {
     if (selectedCalendarId) {
       localStorage.setItem("selectedCalendarId", selectedCalendarId);
@@ -197,9 +366,7 @@ export default function App() {
     } catch (e: any) {
       console.error("Error listing calendars:", e);
       setError(
-        `Failed to list calendars: ${
-          e.result?.error?.message || e.message || "Unknown error"
-        }`,
+        `Failed to list calendars: ${e.result?.error?.message || e.message || "Unknown error"}`,
       );
     }
   }, [isSignedIn, selectedCalendarId, isApiReady]);
@@ -207,16 +374,12 @@ export default function App() {
   useEffect(() => {
     const gapiScript = document.createElement("script");
     gapiScript.src = "https://apis.google.com/js/api.js";
-    gapiScript.async = true;
-    gapiScript.defer = true;
     gapiScript.onload = () => {
       window.gapi.load("client", () => {
         window.gapi.client.init({}).then(() => {
           window.gapi.client.load("calendar", "v3").then(() => {
             const gisScript = document.createElement("script");
             gisScript.src = "https://accounts.google.com/gsi/client";
-            gisScript.async = true;
-            gisScript.defer = true;
             gisScript.onload = () => {
               try {
                 const client = window.google.accounts.oauth2.initTokenClient({
@@ -235,10 +398,7 @@ export default function App() {
                   error_callback: (error: any) => {
                     console.error("Google Sign-In Error:", error);
                     setError(
-                      `Google Sign-In failed: ${
-                        error.message ||
-                        "Please check your configuration and try again."
-                      }`,
+                      `Google Sign-In failed: ${error.message || "Please check your configuration and try again."}`,
                     );
                   },
                 });
@@ -250,9 +410,7 @@ export default function App() {
                   err,
                 );
                 setError(
-                  `Failed to initialize sign-in service: ${
-                    err.message || "Unknown error"
-                  }`,
+                  `Failed to initialize sign-in service: ${err.message || "Unknown error"}`,
                 );
               }
             };
@@ -265,19 +423,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (isSignedIn && isApiReady) {
-      listCalendars();
-    }
+    if (isSignedIn && isApiReady) listCalendars();
   }, [isSignedIn, isApiReady, listCalendars]);
 
   const handleSignIn = () => {
-    if (tokenClient) {
-      tokenClient.requestAccessToken();
-    } else {
+    if (tokenClient) tokenClient.requestAccessToken();
+    else
       setError(
         "Sign-in service is not ready yet. Please wait a moment and try again.",
       );
-    }
   };
 
   const handleSignOut = () => {
@@ -302,46 +456,19 @@ export default function App() {
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleFileSelected = (file: File) => {
     if (file) {
       setImageFile(file);
       setImagePreview(URL.createObjectURL(file));
       setError(null);
-      setAppStep("UPLOAD");
-    }
-  };
-
-  const handlePasteFromClipboard = async () => {
-    try {
-      const clipboardItems = await navigator.clipboard.read();
-      for (const item of clipboardItems) {
-        for (const type of item.types) {
-          if (type.startsWith("image/")) {
-            const blob = await item.getType(type);
-            const file = new File([blob], "pasted-image.png", {
-              type: blob.type,
-            });
-            setImageFile(file);
-            setImagePreview(URL.createObjectURL(file));
-            setError(null);
-            setAppStep("UPLOAD");
-            return;
-          }
-        }
-      }
-      setError("No image found in clipboard.");
-    } catch (err) {
-      console.error("Failed to read clipboard contents: ", err);
-      setError("Failed to paste image. Please try again or select a file.");
+      // Don't auto-advance. Let the user click 'Extract'.
     }
   };
 
   const checkForConflicts = async (shifts: Shift[]) => {
-    if (!selectedCalendarId || shifts.length === 0) return shifts;
-
+    if (!selectedCalendarId || shifts.length === 0)
+      return shifts.map((s) => ({ ...s, selected: true }));
     setLoadingMessage("Checking for conflicting events...");
-
     const minDate = shifts.reduce(
       (min, s) => (s.date < min ? s.date : min),
       shifts[0].date,
@@ -350,7 +477,6 @@ export default function App() {
       (max, s) => (s.date > max ? s.date : max),
       shifts[0].date,
     );
-
     try {
       const response = await window.gapi.client.calendar.events.list({
         calendarId: selectedCalendarId,
@@ -359,12 +485,9 @@ export default function App() {
         singleEvents: true,
         orderBy: "startTime",
       });
-
       const existingEvents = response.result.items;
-      if (existingEvents.length === 0) {
+      if (existingEvents.length === 0)
         return shifts.map((shift) => ({ ...shift, selected: true }));
-      }
-
       const updatedShifts = shifts.map((shift) => {
         const shiftStart = new Date(
           `${shift.date}T${shift.startTime}`,
@@ -377,14 +500,11 @@ export default function App() {
         });
         return { ...shift, isConflicting, selected: true };
       });
-
       return updatedShifts;
     } catch (e: any) {
       console.error("Error checking for conflicts:", e);
       setError(
-        `Could not check for calendar conflicts: ${
-          e.result?.error?.message || "Unknown error"
-        }`,
+        `Could not check for calendar conflicts: ${e.result?.error?.message || "Unknown error"}`,
       );
       return shifts.map((shift) => ({ ...shift, selected: true }));
     }
@@ -420,21 +540,17 @@ export default function App() {
 
   const handleAddShiftsToCalendar = async () => {
     if (!selectedCalendarId || extractedShifts.length === 0) return;
-
     const shiftsToAdd = extractedShifts.filter((s) => s.selected);
-
     if (shiftsToAdd.length === 0) {
       setError("No shifts selected to add.");
       setAppStep("REVIEW");
       return;
     }
-
     setAppStep("ADDING");
     setLoadingMessage(
       `Adding ${shiftsToAdd.length} shifts to your calendar...`,
     );
     setError(null);
-
     const promises = shiftsToAdd.map((shift) => {
       const event = {
         summary: `Work Shift: ${shift.location}`,
@@ -454,7 +570,6 @@ export default function App() {
         resource: event,
       });
     });
-
     try {
       await Promise.all(promises);
       setAppStep("DONE");
@@ -472,15 +587,7 @@ export default function App() {
     setExtractedShifts([]);
     setError(null);
     setIsLoading(false);
-    setAppStep("UPLOAD");
-  };
-
-  const handleBackToConfig = () => {
     setAppStep("CONFIG");
-  };
-
-  const handleContinueToUpload = () => {
-    setAppStep("UPLOAD");
   };
 
   const handleToggleShift = (index: number) => {
@@ -489,36 +596,70 @@ export default function App() {
     setExtractedShifts(newShifts);
   };
 
+  // --- Step Navigation Logic ---
+  const wizardSteps = ["Configuration", "Upload", "Review"];
+  const getStepIndex = (step: AppStep) => {
+    switch (step) {
+      case "CONFIG":
+        return 0;
+      case "UPLOAD":
+        return 1;
+      case "REVIEW":
+        return 2;
+      case "ADDING":
+        return 3;
+      case "DONE":
+        return 3;
+      default:
+        return 0;
+    }
+  };
+  const currentStepIndex = getStepIndex(appStep);
+  const handleBackToConfig = () => setAppStep("CONFIG");
+  const handleBackToUpload = () => setAppStep("UPLOAD");
+
   const isConfigComplete =
     userName.trim() !== "" && isSignedIn && selectedCalendarId !== null;
-
   const getSignInButtonText = () => {
     if (!isApiReady) return "Initializing Sign-In...";
     return "Sign in with Google";
   };
 
+  // --- Main Render ---
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-200 flex flex-col items-center py-8 px-4 sm:px-6 lg:px-8">
-      <header className="text-center mb-10">
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold bg-gradient-to-r from-indigo-400 to-purple-500 bg-clip-text text-transparent tracking-tight">
+    <div className="min-h-screen text-gray-200 flex flex-col items-center py-8 px-4 sm:px-6 lg:px-8">
+      <header className="text-center mb-8">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent tracking-tighter">
           Shift Sync AI
         </h1>
-        <p className="mt-3 text-lg sm:text-xl text-gray-400">
-          Upload your work schedule and let AI add it to your calendar ✨
+        <p className="mt-3 text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto">
+          A simple 3-step wizard to get your schedule into your calendar.
         </p>
       </header>
 
-      {error && (
-        <div className="bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg mb-6 w-full max-w-2xl flex items-center shadow-lg animate-pulse">
-          <ExclamationIcon className="h-5 w-5 text-red-400" />
-          <span className="ml-3">{error}</span>
-        </div>
-      )}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+            className="bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg mb-6 w-full max-w-2xl lg:max-w-4xl flex items-center shadow-lg"
+          >
+            <ExclamationIcon className="h-5 w-5 text-red-400" />
+            <span className="ml-3">{error}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <main className="w-full max-w-2xl space-y-6">
-        <AnimatePresence initial={false}>
+      <main className="w-full max-w-2xl lg:max-w-4xl space-y-6">
+        {currentStepIndex < 3 && (
+          <Stepper steps={wizardSteps} currentStep={currentStepIndex} />
+        )}
+
+        <AnimatePresence mode="wait">
           {appStep === "CONFIG" && (
-            <StepCard title="Configuration" step={1}>
+            <StepCard key="config">
               <div className="space-y-6">
                 <div>
                   <label
@@ -537,123 +678,77 @@ export default function App() {
                       id="name"
                       value={userName}
                       onChange={(e) => setUserName(e.target.value)}
-                      className="focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm bg-gray-700 border-gray-600 rounded-lg py-3 px-4 text-gray-200 placeholder-gray-500"
+                      className="focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm bg-gray-700/50 border-gray-600 rounded-lg py-3 px-4 text-gray-200 placeholder-gray-500"
                       placeholder="e.g., אלכס, Alex, or אברהם"
                     />
                   </div>
                   <p className="mt-1 text-xs text-gray-500">
-                    Enter your name exactly as it appears in Hebrew or English
-                    in the schedule
+                    Enter your name exactly as it appears on the schedule.
                   </p>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Google Calendar Connection
                   </label>
-                  <div className="mt-1">
-                    {!isSignedIn ? (
-                      <button
-                        onClick={handleSignIn}
-                        disabled={!isApiReady}
-                        className="w-full flex items-center justify-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105"
-                      >
-                        {getSignInButtonText()}
-                      </button>
-                    ) : (
-                      <div className="space-y-3">
-                        <select
-                          id="calendar"
-                          name="calendar"
-                          value={selectedCalendarId || ""}
-                          onChange={(e) =>
-                            setSelectedCalendarId(e.target.value)
-                          }
-                          className="block w-full px-4 py-3 text-base bg-gray-700 border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-lg text-gray-200"
-                          disabled={calendars.length === 0}
-                        >
-                          {calendars.length > 0 ? (
-                            calendars.map((cal) => (
-                              <option key={cal.id} value={cal.id}>
-                                {cal.summary}
-                              </option>
-                            ))
-                          ) : (
-                            <option>Loading calendars...</option>
-                          )}
-                        </select>
-                        <button
-                          onClick={handleSignOut}
-                          className="text-sm text-gray-400 hover:text-indigo-400 transition-colors"
-                        >
-                          Sign out
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {isConfigComplete && (
-                  <div className="flex justify-end pt-4">
-                    <motion.button
-                      onClick={handleContinueToUpload}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="w-full sm:w-auto px-6 py-3 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"
+                  {!isSignedIn ? (
+                    <button
+                      onClick={handleSignIn}
+                      disabled={!isApiReady}
+                      className="w-full flex items-center justify-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105"
                     >
-                      Continue
-                    </motion.button>
-                  </div>
-                )}
+                      {getSignInButtonText()}
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <select
+                        id="calendar"
+                        name="calendar"
+                        value={selectedCalendarId || ""}
+                        onChange={(e) => setSelectedCalendarId(e.target.value)}
+                        className="block w-full px-4 py-3 text-base bg-gray-700/50 border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-lg text-gray-200"
+                        disabled={calendars.length === 0}
+                      >
+                        {calendars.length > 0 ? (
+                          calendars.map((cal) => (
+                            <option key={cal.id} value={cal.id}>
+                              {cal.summary}
+                            </option>
+                          ))
+                        ) : (
+                          <option>Loading calendars...</option>
+                        )}
+                      </select>
+                      <button
+                        onClick={handleSignOut}
+                        className="text-sm text-gray-400 hover:text-indigo-400 transition-colors"
+                      >
+                        Sign out
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex justify-end pt-4 mt-6 border-t border-white/10">
+                <motion.button
+                  disabled={!isConfigComplete}
+                  onClick={() => setAppStep("UPLOAD")}
+                  variants={buttonHoverTapVariants}
+                  whileHover="hover"
+                  whileTap="tap"
+                  className="w-full sm:w-auto px-6 py-3 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Continue &rarr;
+                </motion.button>
               </div>
             </StepCard>
           )}
 
           {appStep === "UPLOAD" && (
-            <StepCard title="Upload Schedule" step={2}>
-              <div className="flex justify-end mb-4">
-                <button
-                  onClick={handleBackToConfig}
-                  className="text-sm font-medium text-gray-400 hover:text-indigo-400 transition-colors"
-                >
-                  &larr; Back to Configuration
-                </button>
-              </div>
-              <div className="border-2 border-dashed border-gray-600 rounded-xl hover:border-indigo-500 transition-colors duration-200 bg-gray-800/50">
-                <div className="px-6 py-8">
-                  <div className="text-center">
-                    <UploadIcon />
-                    <div className="mt-4 space-y-2 sm:space-y-0 sm:flex sm:justify-center sm:space-x-4">
-                      <label
-                        htmlFor="file-upload"
-                        className="cursor-pointer inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-indigo-300 bg-indigo-900/50 hover:bg-indigo-800/50 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500 transition-all duration-200"
-                      >
-                        Choose file
-                        <input
-                          id="file-upload"
-                          name="file-upload"
-                          type="file"
-                          className="sr-only"
-                          accept="image/*"
-                          onChange={handleImageUpload}
-                          disabled={!isConfigComplete}
-                        />
-                      </label>
-                      <button
-                        onClick={handlePasteFromClipboard}
-                        className="inline-flex items-center px-4 py-2 border border-gray-600 text-sm font-medium rounded-lg text-gray-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"
-                        disabled={!isConfigComplete}
-                      >
-                        <PasteIcon />
-                        Paste from Clipboard
-                      </button>
-                    </div>
-                    <p className="mt-2 text-sm text-gray-500">
-                      or drag and drop
-                    </p>
-                  </div>
-                </div>
-              </div>
-
+            <StepCard key="upload">
+              <FileUpload
+                onFileSelect={handleFileSelected}
+                disabled={isLoading}
+              />
               {imagePreview && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -667,20 +762,26 @@ export default function App() {
                     <img
                       src={imagePreview}
                       alt="Schedule preview"
-                      className="w-full h-auto max-h-80 object-contain bg-gray-800"
+                      className="w-full h-auto max-h-80 object-contain bg-gray-900"
                     />
                   </div>
                 </motion.div>
               )}
-
-              {imageFile && (
-                <div className="mt-6">
+              <div className="flex justify-between items-center pt-4 mt-6 border-t border-white/10">
+                <button
+                  onClick={handleBackToConfig}
+                  className="text-sm font-medium text-gray-400 hover:text-indigo-400 transition-colors"
+                >
+                  &larr; Back
+                </button>
+                {imageFile && (
                   <motion.button
                     onClick={handleExtractShifts}
-                    disabled={isLoading || !isConfigComplete}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="w-full flex items-center justify-center px-6 py-3 border border-transparent rounded-lg shadow-lg text-base font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    disabled={isLoading || !imageFile}
+                    variants={buttonHoverTapVariants}
+                    whileHover="hover"
+                    whileTap="tap"
+                    className="w-full sm:w-auto flex items-center justify-center px-6 py-3 border border-transparent rounded-lg shadow-lg text-base font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                   >
                     {isLoading ? (
                       <>
@@ -688,84 +789,82 @@ export default function App() {
                         <span className="ml-3">{loadingMessage}</span>
                       </>
                     ) : (
-                      "✨ Extract Shifts with AI"
+                      <>✨ Extract Shifts with AI</>
                     )}
                   </motion.button>
-                </div>
-              )}
+                )}
+              </div>
             </StepCard>
           )}
 
           {appStep === "REVIEW" && (
-            <StepCard title="Review & Confirm" step={3}>
+            <StepCard key="review">
               <div className="space-y-4">
                 <div className="bg-green-900/50 border border-green-700 p-4 rounded-lg">
                   <p className="text-sm text-green-300">
                     Found{" "}
                     <span className="font-bold">{extractedShifts.length}</span>{" "}
                     shifts for <span className="font-semibold">{userName}</span>
-                    . Please review before adding to your calendar.
+                    . Uncheck any you don't want to add.
                   </p>
                 </div>
-
-                <div className="max-h-80 overflow-y-auto pr-2">
-                  <ul className="space-y-3">
+                <div className="max-h-80 overflow-y-auto pr-2 -mr-2">
+                  <motion.ul
+                    className="space-y-3"
+                    variants={listVariants}
+                    initial="hidden"
+                    animate="visible"
+                  >
                     {extractedShifts.map((shift, index) => (
                       <motion.li
                         key={index}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        className={`p-4 rounded-lg border flex items-center space-x-4 transition-all duration-300 cursor-pointer ${
-                          shift.isConflicting
-                            ? "bg-red-900/50 border-red-700"
-                            : "bg-gray-800/50 border-gray-700 hover:shadow-indigo-500/10 hover:shadow-lg"
-                        }`}
+                        variants={listItemVariants}
+                        whileHover={{
+                          scale: 1.02,
+                          transition: { duration: 0.2 },
+                        }}
+                        className={`p-4 rounded-lg border flex items-center space-x-4 transition-all duration-300 cursor-pointer ${shift.isConflicting ? "bg-red-900/50 border-red-700" : "bg-gray-900/50 border-gray-700"}`}
                         onClick={() => handleToggleShift(index)}
                       >
                         <div className="flex-shrink-0">
                           <div
-                            className={`w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 ${
-                              shift.selected
-                                ? "bg-indigo-500 shadow-lg"
-                                : "bg-gray-700 border-2 border-gray-600"
-                            }`}
+                            className={`w-6 h-6 rounded-md flex items-center justify-center transition-all duration-200 ${shift.selected ? "bg-indigo-500 shadow-lg" : "bg-gray-700 border-2 border-gray-600"}`}
                           >
-                            {shift.selected && (
-                              <motion.svg
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                className="w-4 h-4 text-white"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="3"
-                                  d="M5 13l4 4L19 7"
-                                />
-                              </motion.svg>
-                            )}
+                            <AnimatePresence>
+                              {shift.selected && (
+                                <motion.svg
+                                  initial={{ scale: 0, rotate: -90 }}
+                                  animate={{ scale: 1, rotate: 0 }}
+                                  exit={{ scale: 0, rotate: 90 }}
+                                  transition={{
+                                    type: "spring",
+                                    stiffness: 400,
+                                    damping: 15,
+                                  }}
+                                  className="w-4 h-4 text-white"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="3"
+                                    d="M5 13l4 4L19 7"
+                                  />
+                                </motion.svg>
+                              )}
+                            </AnimatePresence>
                           </div>
                         </div>
                         <div className="flex-grow">
                           <p
-                            className={`font-semibold ${
-                              shift.isConflicting
-                                ? "text-red-300"
-                                : "text-gray-200"
-                            }`}
+                            className={`font-semibold ${shift.isConflicting ? "text-red-300" : "text-gray-200"}`}
                           >
                             {shift.date} ({shift.dayOfWeek})
                           </p>
                           <p
-                            className={`text-sm ${
-                              shift.isConflicting
-                                ? "text-red-400"
-                                : "text-gray-400"
-                            }`}
+                            className={`text-sm ${shift.isConflicting ? "text-red-400" : "text-gray-400"}`}
                           >
                             {shift.startTime} - {shift.endTime} at{" "}
                             <span className="font-medium text-indigo-400">
@@ -780,37 +879,40 @@ export default function App() {
                         </div>
                       </motion.li>
                     ))}
-                  </ul>
+                  </motion.ul>
                 </div>
-
-                <div className="flex flex-col sm:flex-row justify-between items-center pt-4 border-t border-gray-700">
-                  <button
-                    onClick={handleStartOver}
-                    className="text-sm font-medium text-gray-400 hover:text-indigo-400 transition-colors mb-4 sm:mb-0"
-                  >
-                    &larr; Start Over
-                  </button>
-                  <motion.button
-                    onClick={handleAddShiftsToCalendar}
-                    disabled={
-                      extractedShifts.filter((s) => s.selected).length === 0
-                    }
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="w-full sm:w-auto px-6 py-3 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    📅 Add Selected to Calendar
-                  </motion.button>
-                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row justify-between items-center pt-4 mt-6 border-t border-white/10">
+                <button
+                  onClick={handleBackToUpload}
+                  className="text-sm font-medium text-gray-400 hover:text-indigo-400 transition-colors mb-4 sm:mb-0"
+                >
+                  &larr; Back
+                </button>
+                <motion.button
+                  onClick={handleAddShiftsToCalendar}
+                  disabled={
+                    extractedShifts.filter((s) => s.selected).length === 0
+                  }
+                  variants={buttonHoverTapVariants}
+                  whileHover="hover"
+                  whileTap="tap"
+                  className="w-full sm:w-auto px-6 py-3 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  📅 Add to Calendar
+                </motion.button>
               </div>
             </StepCard>
           )}
 
           {(appStep === "ADDING" || appStep === "DONE") && (
             <motion.div
+              key="status"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-gray-800 rounded-xl shadow-lg p-8 text-center"
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              className="bg-gray-800/60 backdrop-blur-md rounded-xl shadow-lg ring-1 ring-white/10 p-8 text-center"
             >
               {appStep === "ADDING" ? (
                 <>
@@ -834,8 +936,9 @@ export default function App() {
                   </p>
                   <motion.button
                     onClick={handleStartOver}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    variants={buttonHoverTapVariants}
+                    whileHover="hover"
+                    whileTap="tap"
                     className="mt-8 px-8 py-3 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"
                   >
                     Process Another Schedule
@@ -849,4 +952,3 @@ export default function App() {
     </div>
   );
 }
-
