@@ -5,7 +5,7 @@ import { extractShiftsFromImage } from "./services/geminiService";
 declare global {
   interface Window {
     gapi: any;
-    google: any; // For Google Identity Services
+    google: any;
   }
 }
 
@@ -32,6 +32,7 @@ const CalendarIcon = () => (
     />
   </svg>
 );
+
 const UserIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -46,6 +47,7 @@ const UserIcon = () => (
     />
   </svg>
 );
+
 const UploadIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -62,6 +64,7 @@ const UploadIcon = () => (
     />
   </svg>
 );
+
 const CheckCircleIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -78,6 +81,7 @@ const CheckCircleIcon = () => (
     />
   </svg>
 );
+
 const ExclamationIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -92,6 +96,7 @@ const ExclamationIcon = () => (
     />
   </svg>
 );
+
 const Spinner = () => (
   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
 );
@@ -113,18 +118,24 @@ const StepCard: React.FC<StepCardProps> = ({
   children,
 }) => (
   <div
-    className={`bg-white rounded-xl shadow-md transition-all duration-500 ${isActive ? "opacity-100" : "opacity-50"}`}
+    className={`bg-white rounded-xl shadow-lg transition-all duration-500 ${
+      isActive ? "opacity-100 ring-2 ring-indigo-200" : "opacity-70"
+    }`}
   >
     <div className="p-6">
       <div className="flex items-center">
         <div
-          className={`flex items-center justify-center h-8 w-8 rounded-full ${isActive ? "bg-indigo-600 text-white" : "bg-gray-200 text-gray-600"}`}
+          className={`flex items-center justify-center h-10 w-10 rounded-full ${
+            isActive
+              ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg"
+              : "bg-gray-200 text-gray-600"
+          }`}
         >
           {step}
         </div>
         <h2 className="ml-4 text-xl font-semibold text-gray-700">{title}</h2>
       </div>
-      {isActive && <div className="mt-4 pl-12">{children}</div>}
+      {isActive && <div className="mt-6 pl-14">{children}</div>}
     </div>
   </div>
 );
@@ -144,20 +155,15 @@ export default function App() {
     null,
   );
 
-  const [appStep, setAppStep] = useState<AppStep>("CONFIG");
+  // Missing state variables
+  const [gapiInitialized, setGapiInitialized] = useState(false);
+  const [gisInitialized, setGisInitialized] = useState(false);
   const [tokenClient, setTokenClient] = useState<any>(null);
-  const [gapiReady, setGapiReady] = useState(false);
 
-  useEffect(() => {
-    if (!API_KEY || !GOOGLE_CLIENT_ID) {
-      setError(
-        "Application is not configured correctly. API credentials were not found. Please check the environment variables.",
-      );
-    }
-  }, []);
+  const [appStep, setAppStep] = useState<AppStep>("CONFIG");
 
   const listCalendars = useCallback(async () => {
-    if (!gapiReady) return;
+    if (!gapiInitialized) return;
     try {
       const response = await window.gapi.client.calendar.calendarList.list();
       const items = response.result.items.filter(
@@ -175,91 +181,95 @@ export default function App() {
         `Failed to list calendars: ${e.result?.error?.message || "Unknown error"}`,
       );
     }
-  }, [gapiReady, selectedCalendarId]);
+  }, [gapiInitialized, selectedCalendarId]);
 
-  // Robust Google API initialization, using environment variables
   useEffect(() => {
-    if (!API_KEY || !GOOGLE_CLIENT_ID) return;
+    if (!API_KEY || !GOOGLE_CLIENT_ID) {
+      setError(
+        "Application is not configured correctly. API credentials were not found. Please check the environment variables.",
+      );
+      return;
+    }
 
-    let gapiInitAttempted = false;
-    let gisInitAttempted = false;
-
-    const poll = setInterval(() => {
-      const gapiIsReady = !!window.gapi?.client;
-      const gisIsReady = !!window.google?.accounts?.oauth2?.initTokenClient;
-
-      if (gapiIsReady && !gapiInitAttempted) {
-        gapiInitAttempted = true;
-        window.gapi.load("client", () => {
-          window.gapi.client
-            .init({
-              apiKey: API_KEY,
-              discoveryDocs: [
-                "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
-              ],
-            })
-            .then(() => {
-              setGapiReady(true);
-            })
-            .catch((err: any) => {
-              console.error("Error initializing GAPI client:", err);
-              setError(
-                `Failed to initialize Google Calendar API: ${err.details || err.message}`,
-              );
-            });
-        });
-      }
-
-      if (gisIsReady && !gisInitAttempted) {
-        gisInitAttempted = true;
-        try {
-          const client = window.google.accounts.oauth2.initTokenClient({
-            client_id: GOOGLE_CLIENT_ID,
-            scope: SCOPES,
-            callback: (tokenResponse: any) => {
-              if (tokenResponse && tokenResponse.access_token) {
-                window.gapi.client.setToken({
-                  access_token: tokenResponse.access_token,
-                });
-                setIsSignedIn(true);
-                setError(null); // Clear errors on successful sign-in
-              } else {
-                setError("Authentication failed. Please try again.");
-                setIsSignedIn(false);
-              }
-            },
-            error_callback: (error: any) => {
-              console.error("Google Sign-In Error:", error);
-              setError(
-                `Google Sign-In failed: ${error.message || "Please check your configuration and try again."}`,
-              );
-            },
+    const gapiScript = document.createElement("script");
+    gapiScript.src = "https://apis.google.com/js/api.js";
+    gapiScript.async = true;
+    gapiScript.defer = true;
+    gapiScript.onload = () => {
+      window.gapi.load("client", () => {
+        window.gapi.client
+          .init({
+            apiKey: API_KEY,
+            discoveryDocs: [
+              "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
+            ],
+          })
+          .then(() => {
+            setGapiInitialized(true);
+          })
+          .catch((err: any) => {
+            console.error("Error initializing GAPI client:", err);
+            setError(
+              `Failed to initialize Google Calendar API: ${err.details || err.message}`,
+            );
           });
-          setTokenClient(() => client);
-        } catch (err: any) {
-          console.error("Error initializing Google Identity Services:", err);
-          setError(
-            `Failed to initialize sign-in service: ${err.message || "Unknown error"}`,
-          );
-        }
-      }
+      });
+    };
+    document.body.appendChild(gapiScript);
 
-      if (gapiInitAttempted && gisInitAttempted) {
-        clearInterval(poll);
+    const gisScript = document.createElement("script");
+    gisScript.src = "https://accounts.google.com/gsi/client";
+    gisScript.async = true;
+    gisScript.defer = true;
+    gisScript.onload = () => {
+      try {
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: SCOPES,
+          callback: (tokenResponse: any) => {
+            if (tokenResponse && tokenResponse.access_token) {
+              window.gapi.client.setToken({
+                access_token: tokenResponse.access_token,
+              });
+              setIsSignedIn(true);
+              setError(null);
+            } else {
+              setError("Authentication failed. Please try again.");
+              setIsSignedIn(false);
+            }
+          },
+          error_callback: (error: any) => {
+            console.error("Google Sign-In Error:", error);
+            setError(
+              `Google Sign-In failed: ${error.message || "Please check your configuration and try again."}`,
+            );
+          },
+        });
+        setTokenClient(() => client);
+        setGisInitialized(true);
+      } catch (err: any) {
+        console.error("Error initializing Google Identity Services:", err);
+        setError(
+          `Failed to initialize sign-in service: ${err.message || "Unknown error"}`,
+        );
       }
-    }, 150);
+    };
+    document.body.appendChild(gisScript);
 
-    return () => clearInterval(poll);
+    return () => {
+      document.body.removeChild(gapiScript);
+      document.body.removeChild(gisScript);
+    };
   }, []);
 
   useEffect(() => {
-    if (isSignedIn && gapiReady) {
+    if (isSignedIn && gapiInitialized) {
       listCalendars();
     }
-  }, [isSignedIn, gapiReady, listCalendars]);
+  }, [isSignedIn, gapiInitialized, listCalendars]);
 
   const handleSignIn = () => {
-    if (tokenClient && gapiReady) {
+    if (tokenClient && gapiInitialized && gisInitialized) {
       tokenClient.requestAccessToken();
     } else {
       setError(
@@ -308,7 +318,7 @@ export default function App() {
         setAppStep("REVIEW");
       } else {
         setError(
-          "No shifts found for your name. Please check the name or upload a different image.",
+          `No shifts found for "${userName}". Please check the name spelling or upload a different image.`,
         );
       }
     } catch (e: any) {
@@ -319,7 +329,7 @@ export default function App() {
   };
 
   const handleAddShiftsToCalendar = async () => {
-    if (!selectedCalendarId || extractedShifts.length === 0 || !gapiReady)
+    if (!selectedCalendarId || extractedShifts.length === 0 || !gapiInitialized)
       return;
     setAppStep("ADDING");
     setLoadingMessage(
@@ -369,7 +379,7 @@ export default function App() {
 
   const isConfigComplete =
     userName.trim() !== "" && isSignedIn && selectedCalendarId !== null;
-  const isApiReady = tokenClient && gapiReady;
+  const isApiReady = gisInitialized && gapiInitialized;
 
   useEffect(() => {
     if (
@@ -386,18 +396,18 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center py-8 px-4">
-      <header className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-gray-800 tracking-tight">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex flex-col items-center py-8 px-4">
+      <header className="text-center mb-10">
+        <h1 className="text-5xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent tracking-tight">
           Shift Sync AI
         </h1>
-        <p className="mt-2 text-lg text-gray-500">
-          Upload your work schedule and let AI add it to your calendar.
+        <p className="mt-3 text-xl text-gray-600">
+          Upload your work schedule and let AI add it to your calendar ✨
         </p>
       </header>
 
       {error && (
-        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md mb-6 w-full max-w-2xl flex items-center shadow">
+        <div className="bg-red-50 border-l-4 border-red-400 text-red-700 p-4 rounded-lg mb-6 w-full max-w-2xl flex items-center shadow-sm">
           <ExclamationIcon />
           <span className="ml-3">{error}</span>
         </div>
@@ -409,15 +419,15 @@ export default function App() {
           step={1}
           isActive={appStep === "CONFIG"}
         >
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div>
               <label
                 htmlFor="name"
-                className="block text-sm font-medium text-gray-700"
+                className="block text-sm font-medium text-gray-700 mb-2"
               >
-                Your Name (in Hebrew)
+                Your Name (as it appears in the schedule)
               </label>
-              <div className="mt-1 relative rounded-md shadow-sm">
+              <div className="relative rounded-lg shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <UserIcon />
                 </div>
@@ -427,33 +437,37 @@ export default function App() {
                   id="name"
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
-                  className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md p-2"
-                  placeholder="לדוגמא: אלכס"
+                  className="focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3 px-4"
+                  placeholder="e.g., אלכס, Alex, or אברהם"
                 />
               </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Enter your name exactly as it appears in Hebrew or English in
+                the schedule
+              </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Google Calendar
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Google Calendar Connection
               </label>
               <div className="mt-1">
                 {!isSignedIn ? (
                   <button
                     onClick={handleSignIn}
                     disabled={!isApiReady}
-                    className="w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+                    className="w-full flex items-center justify-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                   >
                     {getSignInButtonText()}
                   </button>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <select
                       id="calendar"
                       name="calendar"
                       value={selectedCalendarId || ""}
                       onChange={(e) => setSelectedCalendarId(e.target.value)}
-                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                      className="block w-full px-4 py-3 text-base border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-lg"
                       disabled={calendars.length === 0}
                     >
                       {calendars.length > 0 ? (
@@ -468,7 +482,7 @@ export default function App() {
                     </select>
                     <button
                       onClick={handleSignOut}
-                      className="text-xs text-gray-500 hover:text-indigo-600"
+                      className="text-sm text-gray-500 hover:text-indigo-600 transition-colors"
                     >
                       Sign out
                     </button>
@@ -484,55 +498,64 @@ export default function App() {
           step={2}
           isActive={appStep !== "CONFIG"}
         >
-          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-            <div className="space-y-1 text-center">
-              <UploadIcon />
-              <div className="flex text-sm text-gray-600">
-                <label
-                  htmlFor="file-upload"
-                  className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500"
-                >
-                  <span>Upload a file</span>
-                  <input
-                    id="file-upload"
-                    name="file-upload"
-                    type="file"
-                    className="sr-only"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    disabled={!isConfigComplete}
-                  />
-                </label>
-                <p className="pl-1">or drag and drop</p>
+          <div className="border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 transition-colors duration-200">
+            <div className="px-6 py-8">
+              <div className="text-center">
+                <UploadIcon />
+                <div className="mt-4">
+                  <label
+                    htmlFor="file-upload"
+                    className="cursor-pointer inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-indigo-600 bg-indigo-100 hover:bg-indigo-200 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500 transition-all duration-200"
+                  >
+                    Choose file
+                    <input
+                      id="file-upload"
+                      name="file-upload"
+                      type="file"
+                      className="sr-only"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      disabled={!isConfigComplete}
+                    />
+                  </label>
+                  <p className="mt-2 text-sm text-gray-500">or drag and drop</p>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  PNG, JPG, GIF up to 10MB
+                </p>
               </div>
-              <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
             </div>
           </div>
+
           {imagePreview && appStep !== "REVIEW" && (
-            <div className="mt-4">
-              <p className="text-sm font-medium text-gray-700">
+            <div className="mt-6">
+              <p className="text-sm font-medium text-gray-700 mb-3">
                 Image Preview:
               </p>
-              <img
-                src={imagePreview}
-                alt="Schedule preview"
-                className="mt-2 rounded-lg shadow-sm max-h-60 w-auto mx-auto"
-              />
+              <div className="rounded-lg overflow-hidden shadow-lg">
+                <img
+                  src={imagePreview}
+                  alt="Schedule preview"
+                  className="w-full h-auto max-h-80 object-contain bg-gray-50"
+                />
+              </div>
             </div>
           )}
+
           {appStep === "UPLOAD" && imageFile && (
             <div className="mt-6">
               <button
                 onClick={handleExtractShifts}
                 disabled={isLoading || !isConfigComplete}
-                className="w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
               >
                 {isLoading ? (
                   <>
-                    <Spinner /> <span className="ml-3">{loadingMessage}</span>
+                    <Spinner />
+                    <span className="ml-3">{loadingMessage}</span>
                   </>
                 ) : (
-                  "Extract Shifts"
+                  "✨ Extract Shifts with AI"
                 )}
               </button>
             </div>
@@ -544,73 +567,82 @@ export default function App() {
           step={3}
           isActive={appStep === "REVIEW"}
         >
-          <p className="text-sm text-gray-600">
-            Found {extractedShifts.length} shifts for{" "}
-            <span className="font-semibold">{userName}</span>. Please review
-            before adding to your calendar.
-          </p>
-          <div className="mt-4 max-h-80 overflow-y-auto pr-2">
-            <ul className="space-y-3">
-              {extractedShifts.map((shift, index) => (
-                <li
-                  key={index}
-                  className="bg-gray-50 p-3 rounded-md border border-gray-200 flex items-center space-x-4"
-                >
-                  <CalendarIcon />
-                  <div className="flex-grow">
-                    <p className="font-semibold text-gray-800">
-                      {shift.date} ({shift.dayOfWeek})
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {shift.startTime} - {shift.endTime} at{" "}
-                      <span className="font-medium">{shift.location}</span>
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="mt-6 flex justify-between items-center">
-            <button
-              onClick={handleStartOver}
-              className="text-sm font-medium text-gray-600 hover:text-indigo-600"
-            >
-              Start Over
-            </button>
-            <button
-              onClick={handleAddShiftsToCalendar}
-              className="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-            >
-              Add to Calendar
-            </button>
+          <div className="space-y-4">
+            <div className="bg-green-50 p-4 rounded-lg">
+              <p className="text-sm text-green-800">
+                Found{" "}
+                <span className="font-bold">{extractedShifts.length}</span>{" "}
+                shifts for <span className="font-semibold">{userName}</span>.
+                Please review before adding to your calendar.
+              </p>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto pr-2">
+              <ul className="space-y-3">
+                {extractedShifts.map((shift, index) => (
+                  <li
+                    key={index}
+                    className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200 flex items-center space-x-4 hover:shadow-sm transition-shadow"
+                  >
+                    <CalendarIcon />
+                    <div className="flex-grow">
+                      <p className="font-semibold text-gray-800">
+                        {shift.date} ({shift.dayOfWeek})
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {shift.startTime} - {shift.endTime} at{" "}
+                        <span className="font-medium text-indigo-600">
+                          {shift.location}
+                        </span>
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+              <button
+                onClick={handleStartOver}
+                className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors"
+              >
+                ← Start Over
+              </button>
+              <button
+                onClick={handleAddShiftsToCalendar}
+                className="px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200"
+              >
+                📅 Add to Calendar
+              </button>
+            </div>
           </div>
         </StepCard>
 
         {(appStep === "ADDING" || appStep === "DONE") && (
-          <div className="bg-white rounded-xl shadow-md p-8 text-center">
+          <div className="bg-white rounded-xl shadow-lg p-8 text-center">
             {appStep === "ADDING" ? (
               <>
-                <div className="flex justify-center mb-4">
-                  <Spinner />
+                <div className="flex justify-center mb-6">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
                 </div>
-                <h2 className="text-xl font-semibold text-gray-700">
+                <h2 className="text-2xl font-semibold text-gray-700 mb-2">
                   {loadingMessage}
                 </h2>
-                <p className="text-gray-500 mt-2">Please wait...</p>
+                <p className="text-gray-500">Please wait...</p>
               </>
             ) : (
               <>
                 <CheckCircleIcon />
-                <h2 className="mt-4 text-2xl font-bold text-gray-800">
-                  Success!
+                <h2 className="mt-6 text-3xl font-bold text-gray-800">
+                  Success! 🎉
                 </h2>
-                <p className="mt-2 text-gray-600">
+                <p className="mt-3 text-lg text-gray-600">
                   {extractedShifts.length} shifts have been added to your
                   calendar.
                 </p>
                 <button
                   onClick={handleStartOver}
-                  className="mt-6 px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  className="mt-8 px-8 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"
                 >
                   Process Another Schedule
                 </button>
