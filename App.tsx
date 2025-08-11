@@ -201,10 +201,9 @@ export default function App() {
           .init({
             clientId: GOOGLE_CLIENT_ID,
             apiKey: API_KEY,
-            discoveryDocs: [
-              "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
-            ],
+            scope: SCOPES,
           })
+          .then(() => window.gapi.client.load("calendar", "v3"))
           .then(() => {
             setGapiInitialized(true);
           })
